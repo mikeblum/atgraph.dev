@@ -17,10 +17,10 @@ func main() {
 	}
 	var profile *bsky.Profile
 	if profile, err = client.Profile(); err != nil {
-		log.WithError(err, "Error fetching profile")
+		log.WithError(err, "Error fetching bsky profile")
 		exit()
 	}
-	log.With("profile", profile).Info("Fetched profiles")
+	log.With("profile", profile).Info("Fetched bsky profiles")
 }
 
 func exit() {
