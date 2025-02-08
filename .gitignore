@@ -1,0 +1,34 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Vendor directory
+/vendor
+
+# Go workspace cache
+/go.work.sum
+/go.work
+
+# Built binaries
+/build
+/dist
+
+# IDE
+.idea/
+*.iml
+
+# Temporary files
+*~
+# Log files
+*.log
+
+# Env files
+*.env
+
+# vscode
+.vscode/
