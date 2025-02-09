@@ -15,8 +15,8 @@ func main() {
 		log.WithError(err, "Error creating bsky client")
 		exit()
 	}
-	if err = client.ListRepos(); err != nil {
-		log.WithError(err, "Error fetching bsky repos")
+	if err = client.Backfill(); err != nil {
+		log.WithError(err, "Error performing bsky backfill")
 		exit()
 	}
 }

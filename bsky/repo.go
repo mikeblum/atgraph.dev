@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
@@ -13,25 +15,42 @@ import (
 	"github.com/bluesky-social/indigo/repo"
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/ipfs/go-cid"
+	"github.com/mikeblum/atproto-graph-viz/conf"
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	PAGE_SIZE = 10
-)
-
-type RepoContext struct {
+type repoContext struct {
 	Did string `json:"did"` // DID persistent, long-term identifiers for every account.
 	Rev string `json:"rev"` // REV revision number of the repo.
 }
 
-func (c *Client) ListRepos() error {
+func (c *Client) Backfill() error {
+	var next string
+	var err error
+	for {
+		if next, err = c.listRepos(next); err != nil {
+			c.log.WithError(err, "Error fetching bsky repos")
+			return err
+		}
+		if next == "" {
+			break
+		}
+	}
+	time.Sleep(time.Second)
+	return nil
+}
+
+func (c *Client) listRepos(next string) (string, error) {
 	var ctx = context.Background()
 	var repos *atproto.SyncListRepos_Output
 	var err error
-	var cursor string
-	if repos, err = atproto.SyncListRepos(ctx, c.client, cursor, PAGE_SIZE); err != nil {
-		return err
+	var pageSize int
+
+	if pageSize, err = strconv.Atoi(conf.GetEnv(ENV_BSKY_PAGE_SIZE, strconv.Itoa(DEFAULT_PAGE_SIZE))); err != nil {
+		pageSize = DEFAULT_PAGE_SIZE
+	}
+	if repos, err = atproto.SyncListRepos(ctx, c.client, next, int64(pageSize)); err != nil {
+		return next, err
 	}
 	errs, ctx := errgroup.WithContext(ctx)
 	for _, repo := range repos.Repos {
@@ -42,13 +61,13 @@ func (c *Client) ListRepos() error {
 		c.log.With("did", repo.Did, "head", repo.Head, "rev", repo.Rev).Debug("bsky repo")
 		// TODO: worker pool
 		errs.Go(func() error {
-			return c.GetRepo(context.TODO(), RepoContext{Did: repo.Did, Rev: repo.Rev})
+			return c.getRepo(context.TODO(), repoContext{Did: repo.Did, Rev: repo.Rev})
 		})
 	}
-	return errs.Wait()
+	return *repos.Cursor, errs.Wait()
 }
 
-func (c *Client) GetRepo(ctx context.Context, repoCtx RepoContext) error {
+func (c *Client) getRepo(ctx context.Context, repoCtx repoContext) error {
 	var repoData []byte
 	var err error
 	var atid *syntax.AtIdentifier
@@ -93,7 +112,7 @@ func (c *Client) resolveLexicon(ctx context.Context, r *repo.Repo) error {
 	return r.ForEach(ctx, "", func(k string, v cid.Cid) error {
 		var rec repo.CborMarshaler
 		if _, rec, err = r.GetRecord(ctx, k); err != nil {
-			c.log.With("err", err, "did", did).Warn("unrecognized lexicon type: %s")
+			c.log.With("err", err, "did", did, "key", k).Warn("unrecognized lexicon type")
 			return nil
 		}
 		nsid := strings.SplitN(k, "/", 2)[0]
@@ -136,8 +155,8 @@ func (c *Client) resolveLexicon(ctx context.Context, r *repo.Repo) error {
 				return fmt.Errorf("found wrong type in listitem location in tree: %s", did)
 			}
 		default:
-			err := fmt.Errorf("found unknown type in tree: %s", did)
-			c.log.With("err", err).Warn("unrecognized lexicon type")
+			err := fmt.Errorf("found unknown type in tree")
+			c.log.With("err", err, "did", did, "nsid", nsid).Warn("unrecognized lexicon type")
 		}
 		return nil
 	})
