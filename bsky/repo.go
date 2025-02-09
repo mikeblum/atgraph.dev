@@ -3,10 +3,11 @@ package bsky
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
@@ -19,89 +20,86 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type Item struct {
+	Data  any                `json:"data"`
+	DID   syntax.DID         `json:"did"`
+	Ident *identity.Identity `json:"ident"`
+	NSID  syntax.NSID        `json:"nsid"`
+}
+
 type repoContext struct {
 	Did string `json:"did"` // DID persistent, long-term identifiers for every account.
 	Rev string `json:"rev"` // REV revision number of the repo.
 }
 
-func (c *Client) Backfill() error {
-	var next string
-	var err error
-	for {
-		if next, err = c.listRepos(next); err != nil {
-			c.log.WithError(err, "Error fetching bsky repos")
-			return err
-		}
-		if next == "" {
-			break
-		}
-	}
-	time.Sleep(time.Second)
-	return nil
-}
-
-func (c *Client) listRepos(next string) (string, error) {
-	var ctx = context.Background()
+func (c *Client) listRepos(ctx context.Context, next string, stream func(context.Context, chan *Item) error) (string, error) {
 	var repos *atproto.SyncListRepos_Output
 	var err error
-	var pageSize int
 
-	if pageSize, err = strconv.Atoi(conf.GetEnv(ENV_BSKY_PAGE_SIZE, strconv.Itoa(DEFAULT_PAGE_SIZE))); err != nil {
-		pageSize = DEFAULT_PAGE_SIZE
-	}
-	if repos, err = atproto.SyncListRepos(ctx, c.client, next, int64(pageSize)); err != nil {
+	if repos, err = atproto.SyncListRepos(ctx, c.client, next, int64(pageSize())); err != nil {
 		return next, err
 	}
-	errs, ctx := errgroup.WithContext(ctx)
+
+	var errs []error
+	var mu sync.Mutex
+
+	group, _ := errgroup.WithContext(ctx)
+
 	for _, repo := range repos.Repos {
 		active := repo.Active != nil && *repo.Active
 		if !active {
 			continue
 		}
-		c.log.With("did", repo.Did, "head", repo.Head, "rev", repo.Rev).Debug("bsky repo")
-		// TODO: worker pool
-		errs.Go(func() error {
-			return c.getRepo(context.TODO(), repoContext{Did: repo.Did, Rev: repo.Rev})
+		group.Go(func() error {
+			c.log.With("did", repo.Did, "head", repo.Head, "rev", repo.Rev).Info("bsky repo")
+			items, _ := c.getRepo(ctx, repoContext{Did: repo.Did, Rev: repo.Rev})
+			if err := stream(ctx, items); err != nil {
+				mu.Lock()
+				defer mu.Unlock()
+				errs = append(errs, err)
+			}
+			// allow other goroutines to progress
+			return nil
 		})
 	}
-	return *repos.Cursor, errs.Wait()
+
+	_ = group.Wait()
+
+	return *repos.Cursor, errors.Join(errs...)
 }
 
-func (c *Client) getRepo(ctx context.Context, repoCtx repoContext) error {
+func (c *Client) getRepo(ctx context.Context, repoCtx repoContext) (chan *Item, error) {
 	var repoData []byte
 	var err error
+	var ident *identity.Identity
 	var atid *syntax.AtIdentifier
 	if atid, err = syntax.ParseAtIdentifier(repoCtx.Did); err != nil {
-		return err
+		return nil, err
 	}
-	ident, err := identity.DefaultDirectory().Lookup(ctx, *atid)
-	if err != nil {
-		return err
+	if ident, err = identity.DefaultDirectory().Lookup(ctx, *atid); err != nil {
+		return nil, err
 	}
 	xrpcc := xrpc.Client{
 		Host: ident.PDSEndpoint(),
 	}
 	if xrpcc.Host == "" {
-		return fmt.Errorf("no PDS endpoint for identity: %s", atid)
+		return nil, fmt.Errorf("no PDS endpoint for identity: %s", atid)
 	}
 	if repoData, err = atproto.SyncGetRepo(ctx, &xrpcc, ident.DID.String(), ""); err != nil {
 		c.log.WithError(err, "Error fetching bsky repo")
-		return err
+		return nil, err
 	}
 	// TODO: worker pool
 	var r *repo.Repo
 	if r, err = repo.ReadRepoFromCar(context.Background(), bytes.NewReader(repoData)); err != nil {
 		c.log.WithError(err, "Error reading bsky repo")
-		return err
+		return nil, err
 	}
-	if err = c.resolveLexicon(ctx, r); err != nil {
-		c.log.WithError(err, "Error parsing bsky repo")
-		return err
-	}
-	return nil
+	return c.resolveLexicon(ctx, ident, r)
 }
 
-func (c *Client) resolveLexicon(ctx context.Context, r *repo.Repo) error {
+func (c *Client) resolveLexicon(ctx context.Context, ident *identity.Identity, r *repo.Repo) (chan *Item, error) {
+	items := make(chan *Item, pageSize())
 	// extract DID from repo commit
 	var did syntax.DID
 	var err error
@@ -109,55 +107,81 @@ func (c *Client) resolveLexicon(ctx context.Context, r *repo.Repo) error {
 	if did, err = syntax.ParseDID(sc.Did); err != nil {
 		c.log.With("err", err).Warn("unrecognized did")
 	}
-	return r.ForEach(ctx, "", func(k string, v cid.Cid) error {
+	err = r.ForEach(ctx, "", func(k string, v cid.Cid) error {
+		var data any
+		var ok bool
 		var rec repo.CborMarshaler
 		if _, rec, err = r.GetRecord(ctx, k); err != nil {
 			c.log.With("err", err, "did", did, "key", k).Warn("unrecognized lexicon type")
 			return nil
 		}
-		nsid := strings.SplitN(k, "/", 2)[0]
+		nsid := syntax.NSID(strings.SplitN(k, "/", 2)[0]).Normalize()
 
 		switch nsid {
-		case "app.bsky.feed.post":
-			if _, ok := rec.(*bsky.FeedPost); !ok {
+		case ITEM_FEED_POST:
+			if data, ok = rec.(*bsky.FeedPost); !ok {
 				return fmt.Errorf("found wrong type in feed post location in tree: %s", did)
 			}
-		case "app.bsky.actor.profile":
-			if _, ok := rec.(*bsky.ActorProfile); !ok {
+		case ITEM_ACTOR_PROFILE:
+			if data, ok = rec.(*bsky.ActorProfile); !ok {
 				return fmt.Errorf("found wrong type in actor location in tree: %s", did)
 			}
-		case "app.bsky.graph.follow":
-			if _, ok := rec.(*bsky.GraphFollow); !ok {
+		case ITEM_GRAPH_FOLLOW:
+			if data, ok = rec.(*bsky.GraphFollow); !ok {
 				return fmt.Errorf("found wrong type in follow location in tree: %s", did)
 			}
-		case "app.bsky.feed.repost":
-			if _, ok := rec.(*bsky.FeedRepost); !ok {
+		case ITEM_FEED_REPOST:
+			if data, ok = rec.(*bsky.FeedRepost); !ok {
 				return fmt.Errorf("found wrong type in repost location in tree: %s", did)
 			}
-		case "app.bsky.feed.like":
-			if _, ok := rec.(*bsky.FeedLike); !ok {
+		case ITEM_FEED_LIKE:
+			if data, ok = rec.(*bsky.FeedLike); !ok {
 				return fmt.Errorf("found wrong type in like location in tree: %s", did)
 			}
-		case "app.bsky.graph.block":
-			if _, ok := rec.(*bsky.GraphBlock); !ok {
+		case ITEM_GRAPH_BLOCK:
+			if data, ok = rec.(*bsky.GraphBlock); !ok {
 				return fmt.Errorf("found wrong type in block location in tree: %s", did)
 			}
-		case "app.bsky.graph.listblock":
-			if _, ok := rec.(*bsky.GraphListblock); !ok {
+		case ITEM_GRAPH_LIST_BLOCK:
+			if data, ok = rec.(*bsky.GraphListblock); !ok {
 				return fmt.Errorf("found wrong type in listblock location in tree: %s", did)
 			}
-		case "app.bsky.graph.list":
-			if _, ok := rec.(*bsky.GraphList); !ok {
+		case ITEM_GRAPH_LIST:
+			if data, ok = rec.(*bsky.GraphList); !ok {
 				return fmt.Errorf("found wrong type in list location in tree: %s", did)
 			}
-		case "app.bsky.graph.listitem":
-			if _, ok := rec.(*bsky.GraphListitem); !ok {
+		case ITEM_GRAPH_LIST_ITEM:
+			if data, ok = rec.(*bsky.GraphListitem); !ok {
 				return fmt.Errorf("found wrong type in listitem location in tree: %s", did)
 			}
 		default:
-			err := fmt.Errorf("found unknown type in tree")
+			err = fmt.Errorf("found unknown type in tree")
 			c.log.With("err", err, "did", did, "nsid", nsid).Warn("unrecognized lexicon type")
 		}
+		if err != nil {
+			return err
+		}
+
+		items <- &Item{
+			Data:  data,
+			DID:   did,
+			Ident: ident,
+			NSID:  nsid,
+		}
+
 		return nil
 	})
+
+	close(items)
+
+	return items, err
+}
+
+func pageSize() int {
+	var pageSize int
+	var err error
+	if pageSize, err = strconv.Atoi(conf.GetEnv(ENV_BSKY_PAGE_SIZE, strconv.Itoa(DEFAULT_PAGE_SIZE))); err != nil {
+		pageSize = DEFAULT_PAGE_SIZE
+	}
+	return pageSize
 }

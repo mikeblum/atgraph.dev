@@ -7,6 +7,7 @@ require (
 	github.com/gorilla/websocket v1.5.1
 	github.com/ipfs/go-cid v0.5.0
 	github.com/joho/godotenv v1.5.1
+	github.com/neo4j/neo4j-go-driver/v5 v5.27.0
 	golang.org/x/sync v0.11.0
 )
 
