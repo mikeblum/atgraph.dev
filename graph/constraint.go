@@ -8,15 +8,15 @@ import (
 )
 
 const (
-	uniq_profile_id        = `CREATE CONSTRAINT uniq_profile_id IF NOT EXISTS FOR (n:Profile) REQUIRE (n.id) IS UNIQUE;`
-	uniq_profile_handle_id = `CREATE CONSTRAINT uniq_profile_handle_id IF NOT EXISTS FOR (n:Profile) REQUIRE (n.handle, n.id) IS UNIQUE;`
+	uidx_profile_id        = `CREATE CONSTRAINT uidx_profile_id IF NOT EXISTS FOR (n:Profile) REQUIRE (n.id) IS UNIQUE;`
+	uidx_profile_handle_id = `CREATE CONSTRAINT uidx_profile_handle_id IF NOT EXISTS FOR (n:Profile) REQUIRE (n.handle, n.id) IS UNIQUE;`
 )
 
 func (e *Engine) CreateConstraints(ctx context.Context) error {
 	var err error
 	constraints := []string{
-		uniq_profile_id,
-		uniq_profile_handle_id,
+		uidx_profile_id,
+		uidx_profile_handle_id,
 	}
 	for _, constraint := range constraints {
 		next := constraint

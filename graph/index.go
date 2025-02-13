@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	idx_profile_id      = `CREATE INDEX idx_profile_id IF NOT EXISTS FOR (n:Profile) ON (n.id);`
 	idx_profile_created = `CREATE INDEX idx_profile_created IF NOT EXISTS FOR (n:Profile) ON (n.created);`
 	idx_profile_updated = `CREATE INDEX idx_profile_updated IF NOT EXISTS FOR (n:Profile) ON (n.updated);`
 )
@@ -16,7 +15,6 @@ const (
 func (e *Engine) CreateIndexes(ctx context.Context) error {
 	var err error
 	indexes := []string{
-		idx_profile_id,
 		idx_profile_created,
 		idx_profile_updated,
 	}
