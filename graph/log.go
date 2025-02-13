@@ -22,11 +22,11 @@ func neo4jLogBridge(log *conf.Log) *LogBridge {
 }
 
 func (l *LogBridge) LogClientMessage(context string, msg string, args ...any) {
-	l.WithGroup(context).Info(fmt.Sprintf(msg, args...))
+	l.WithGroup(context).Debug(fmt.Sprintf(msg, args...))
 }
 
 func (l *LogBridge) LogServerMessage(context string, msg string, args ...any) {
-	l.WithGroup(context).Info(fmt.Sprintf(msg, args...))
+	l.WithGroup(context).Debug(fmt.Sprintf(msg, args...))
 }
 
 // verify LogBridge implements BoltLogger interface

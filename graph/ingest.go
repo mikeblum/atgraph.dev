@@ -16,7 +16,7 @@ const (
 	APP_INGEST = "atproto-graph-viz:ingest"
 )
 
-func (e *Engine) Ingest(ctx context.Context, stream chan *bsky.Item) error {
+func (e *Engine) Ingest(ctx context.Context, stream <-chan *bsky.Item) error {
 	var err error
 	for item := range stream {
 		var records chan *neo4j.Record
@@ -139,7 +139,7 @@ func (e *Engine) ingestProfile(ctx context.Context, item *bsky.Item, actor *bsky
 			}
 			return records, nil
 		},
-		// neo4j.WithTxTimeout(timeout()),
+		neo4j.WithTxTimeout(timeout()),
 		neo4j.WithTxMetadata(map[string]any{"app": APP_INGEST}))
 	return records
 }

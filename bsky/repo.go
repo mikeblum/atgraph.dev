@@ -3,11 +3,9 @@ package bsky
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
@@ -17,7 +15,6 @@ import (
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/ipfs/go-cid"
 	"github.com/mikeblum/atproto-graph-viz/conf"
-	"golang.org/x/sync/errgroup"
 )
 
 type Item struct {
@@ -32,43 +29,39 @@ type repoContext struct {
 	Rev string `json:"rev"` // REV revision number of the repo.
 }
 
-func (c *Client) listRepos(ctx context.Context, next string, stream func(context.Context, chan *Item) error) (string, error) {
+func (c *Client) listRepos(ctx context.Context, next string, stream func(items []*Item) error) (string, chan error) {
 	var repos *atproto.SyncListRepos_Output
 	var err error
+	errs := make(chan error)
 
-	if repos, err = atproto.SyncListRepos(ctx, c.client, next, int64(pageSize())); err != nil {
-		return next, err
+	pageSize := int64(pageSize())
+	if repos, err = atproto.SyncListRepos(ctx, c.client, next, pageSize); err != nil {
+		errs <- err
+		return next, errs
 	}
 
-	var errs []error
-	var mu sync.Mutex
-
-	group, _ := errgroup.WithContext(ctx)
+	c.log.With("action", "list-repos", "next", next, "page-size", pageSize, "repos", len(repos.Repos)).Info("Fetching Bluesky repo")
 
 	for _, repo := range repos.Repos {
-		active := repo.Active != nil && *repo.Active
-		if !active {
-			continue
-		}
-		group.Go(func() error {
-			c.log.With("did", repo.Did, "head", repo.Head, "rev", repo.Rev).Info("bsky repo")
-			items, _ := c.getRepo(ctx, repoContext{Did: repo.Did, Rev: repo.Rev})
-			if err := stream(ctx, items); err != nil {
-				mu.Lock()
-				defer mu.Unlock()
-				errs = append(errs, err)
+		go func() {
+			active := repo.Active != nil && *repo.Active
+			if !active {
+				return
 			}
-			// allow other goroutines to progress
-			return nil
-		})
+			var items []*Item
+			if items, err = c.getRepo(ctx, repoContext{Did: repo.Did, Rev: repo.Rev}); err != nil {
+				c.log.WithError(err, "Error fetching Bluesky repo", "did", repo.Did, "head", repo.Head, "rev", repo.Rev)
+			}
+			// enqueue bsky items for ingestion
+			c.log.With("action", "get-repo", "did", repo.Did, "items", len(items)).Info("Fetching Bluesky items")
+			stream(items)
+		}()
 	}
 
-	_ = group.Wait()
-
-	return *repos.Cursor, errors.Join(errs...)
+	return *repos.Cursor, errs
 }
 
-func (c *Client) getRepo(ctx context.Context, repoCtx repoContext) (chan *Item, error) {
+func (c *Client) getRepo(ctx context.Context, repoCtx repoContext) ([]*Item, error) {
 	var repoData []byte
 	var err error
 	var ident *identity.Identity
@@ -89,7 +82,6 @@ func (c *Client) getRepo(ctx context.Context, repoCtx repoContext) (chan *Item, 
 		c.log.WithError(err, "Error fetching bsky repo")
 		return nil, err
 	}
-	// TODO: worker pool
 	var r *repo.Repo
 	if r, err = repo.ReadRepoFromCar(context.Background(), bytes.NewReader(repoData)); err != nil {
 		c.log.WithError(err, "Error reading bsky repo")
@@ -98,8 +90,8 @@ func (c *Client) getRepo(ctx context.Context, repoCtx repoContext) (chan *Item, 
 	return c.resolveLexicon(ctx, ident, r)
 }
 
-func (c *Client) resolveLexicon(ctx context.Context, ident *identity.Identity, r *repo.Repo) (chan *Item, error) {
-	items := make(chan *Item, pageSize())
+func (c *Client) resolveLexicon(ctx context.Context, ident *identity.Identity, r *repo.Repo) ([]*Item, error) {
+	items := make([]*Item, 0, pageSize())
 	// extract DID from repo commit
 	var did syntax.DID
 	var err error
@@ -170,17 +162,15 @@ func (c *Client) resolveLexicon(ctx context.Context, ident *identity.Identity, r
 			return err
 		}
 
-		items <- &Item{
+		items = append(items, &Item{
 			Data:  data,
 			DID:   did,
 			Ident: ident,
 			NSID:  nsid,
-		}
+		})
 
 		return nil
 	})
-
-	close(items)
 
 	return items, err
 }

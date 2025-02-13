@@ -40,7 +40,8 @@ func main() {
 		exit()
 	}
 
-	if err = client.BackfillRepos(ctx, engine.Ingest); err != nil {
+	// configure ingest engine
+	if err = client.Ingest(engine.Ingest).BackfillRepos(ctx); err != nil {
 		log.WithError(err, "Error performing bsky backfill")
 		exit()
 	}

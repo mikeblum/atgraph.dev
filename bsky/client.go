@@ -16,6 +16,8 @@ type Client struct {
 	client  *xrpc.Client
 	session *atproto.ServerCreateSession_Output
 	log     *conf.Log
+
+	ingest func(ctx context.Context, stream <-chan *Item) error
 }
 
 func New() (*Client, error) {
@@ -59,6 +61,11 @@ func New() (*Client, error) {
 		session: session,
 		log:     log,
 	}, nil
+}
+
+func (c *Client) Ingest(ingest func(ctx context.Context, stream <-chan *Item) error) *Client {
+	c.ingest = ingest
+	return c
 }
 
 func (c *Client) Profile() (*Profile, error) {
