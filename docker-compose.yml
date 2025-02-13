@@ -7,6 +7,10 @@ services:
     environment:
       NEO4J_AUTH: none
       NEO4J_initial_dbms_default__database: bluesky
+      NEO4J_server_bolt_telemetry_enabled: true
+      NEO4J_dbms_usage__report_enabled: false
+      # query.log gated in enterprise edition
+      NEO4J_db_logs_query_enabled: INFO
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs

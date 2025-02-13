@@ -29,6 +29,12 @@ func main() {
 		exit()
 	}
 
+	// create constraints
+	if err = engine.CreateConstraints(ctx); err != nil {
+		log.WithError(err, "Error creating constraints")
+		exit()
+	}
+
 	if client, err = bsky.New(); err != nil {
 		log.WithError(err, "Error creating bsky client")
 		exit()

@@ -122,6 +122,7 @@ func (c *Client) resolveLexicon(ctx context.Context, ident *identity.Identity, r
 			if data, ok = rec.(*bsky.FeedPost); !ok {
 				return fmt.Errorf("found wrong type in feed post location in tree: %s", did)
 			}
+			err = unsupportedLexicon(ITEM_FEED_POST)
 		case ITEM_ACTOR_PROFILE:
 			if data, ok = rec.(*bsky.ActorProfile); !ok {
 				return fmt.Errorf("found wrong type in actor location in tree: %s", did)
@@ -130,30 +131,37 @@ func (c *Client) resolveLexicon(ctx context.Context, ident *identity.Identity, r
 			if data, ok = rec.(*bsky.GraphFollow); !ok {
 				return fmt.Errorf("found wrong type in follow location in tree: %s", did)
 			}
+			err = unsupportedLexicon(ITEM_GRAPH_FOLLOW)
 		case ITEM_FEED_REPOST:
 			if data, ok = rec.(*bsky.FeedRepost); !ok {
 				return fmt.Errorf("found wrong type in repost location in tree: %s", did)
 			}
+			err = unsupportedLexicon(ITEM_FEED_REPOST)
 		case ITEM_FEED_LIKE:
 			if data, ok = rec.(*bsky.FeedLike); !ok {
 				return fmt.Errorf("found wrong type in like location in tree: %s", did)
 			}
+			err = unsupportedLexicon(ITEM_FEED_LIKE)
 		case ITEM_GRAPH_BLOCK:
 			if data, ok = rec.(*bsky.GraphBlock); !ok {
 				return fmt.Errorf("found wrong type in block location in tree: %s", did)
 			}
+			err = unsupportedLexicon(ITEM_GRAPH_BLOCK)
 		case ITEM_GRAPH_LIST_BLOCK:
 			if data, ok = rec.(*bsky.GraphListblock); !ok {
 				return fmt.Errorf("found wrong type in listblock location in tree: %s", did)
 			}
+			err = unsupportedLexicon(ITEM_GRAPH_LIST_BLOCK)
 		case ITEM_GRAPH_LIST:
 			if data, ok = rec.(*bsky.GraphList); !ok {
 				return fmt.Errorf("found wrong type in list location in tree: %s", did)
 			}
+			err = unsupportedLexicon(ITEM_GRAPH_LIST)
 		case ITEM_GRAPH_LIST_ITEM:
 			if data, ok = rec.(*bsky.GraphListitem); !ok {
 				return fmt.Errorf("found wrong type in listitem location in tree: %s", did)
 			}
+			err = unsupportedLexicon(ITEM_GRAPH_LIST_ITEM)
 		default:
 			err = fmt.Errorf("found unknown type in tree")
 			c.log.With("err", err, "did", did, "nsid", nsid).Warn("unrecognized lexicon type")
@@ -184,4 +192,8 @@ func pageSize() int {
 		pageSize = DEFAULT_PAGE_SIZE
 	}
 	return pageSize
+}
+
+func unsupportedLexicon(nsid syntax.NSID) error {
+	return fmt.Errorf("TODO: unsupported lexicon: %s", nsid.String())
 }
