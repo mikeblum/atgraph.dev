@@ -61,6 +61,8 @@ func (c *Client) listRepos(ctx context.Context, next string, stream func(items [
 	return *repos.Cursor, errs
 }
 
+// TODO - implement retry / exponential backoff rate-limiting
+// ex. time=2025-02-13T01:46:32.112-06:00 level=ERROR msg="Error fetching Bluesky repo" error="XRPC ERROR 429: RateLimitExceeded: Rate Limit Exceeded (throttled until 2025-02-13 01:46:48 -0600 CST)"
 func (c *Client) getRepo(ctx context.Context, repoCtx repoContext) ([]*Item, error) {
 	var repoData []byte
 	var err error
