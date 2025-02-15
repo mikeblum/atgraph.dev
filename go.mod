@@ -3,11 +3,12 @@ module github.com/mikeblum/atproto-graph-viz
 go 1.23.5
 
 require (
-	github.com/bluesky-social/indigo v0.0.0-20250205215759-9f7ea1d5a39f
+	github.com/bluesky-social/indigo v0.0.0-20250213180039-81637f14cdd4
 	github.com/gorilla/websocket v1.5.1
 	github.com/ipfs/go-cid v0.5.0
 	github.com/joho/godotenv v1.5.1
 	github.com/neo4j/neo4j-go-driver/v5 v5.27.0
+	github.com/stretchr/testify v1.10.0
 )
 
 require (
@@ -91,7 +92,6 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/whyrusleeping/cbor v0.0.0-20171005072247-63513f603b11 // indirect
 	github.com/whyrusleeping/cbor-gen v0.2.1-0.20241030202151-b7a6831be65e // indirect
 	gitlab.com/yawning/secp256k1-voi v0.0.0-20230925100816-f2616030848b // indirect
