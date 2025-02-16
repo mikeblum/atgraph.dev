@@ -34,7 +34,13 @@ func newLog(level slog.Level) *Log {
 	return &Log{logger}
 }
 
-func (l *Log) WithError(err error, msg string, args ...any) *Log {
-	l.With("error", err).With(args...).Error(msg)
+func (l *Log) WithError(err error) *Log {
+	log := *l
+	log.Logger = log.With("error", err)
+	return &log
+}
+
+func (l *Log) WithErrorMsg(err error, msg string, args ...any) *Log {
+	l.WithError(err).With(args...).Error(msg)
 	return l
 }

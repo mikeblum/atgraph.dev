@@ -11,6 +11,7 @@ const (
 	// defaults
 	BSKY_SOCIAL_URL      = "https://bsky.social"
 	DEFAULT_PAGE_SIZE    = 1000
-	DEFAULT_WORKER_COUNT = 3
+	DEFAULT_WORKER_COUNT = 5
 	DEFAULT_MAX_RETRIES  = 3
+	ITEMS_BUFFER         = 100
 )

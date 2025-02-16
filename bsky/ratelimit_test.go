@@ -37,7 +37,7 @@ func retryOnceDeadlineTest(t *testing.T) {
 	handler := NewRateLimitHandler(&xrpc.Client{})
 	var attempt int
 	reset := time.Now().UTC()
-	err := handler.executeWithRetry(context.Background(), ReadOperation, func() error {
+	err := handler.withRetry(context.Background(), ReadOperation, func() error {
 		attempt++
 		reset = reset.Add(time.Duration(attempt) * time.Millisecond)
 		if attempt <= 1 {
@@ -58,7 +58,7 @@ func retryOnceBackoffTest(t *testing.T) {
 	handler := NewRateLimitHandler(&xrpc.Client{})
 	var attempt int
 	reset := time.Now().UTC()
-	err := handler.executeWithRetry(context.Background(), ReadOperation, func() error {
+	err := handler.withRetry(context.Background(), ReadOperation, func() error {
 		attempt++
 		reset = reset.Add(time.Duration(attempt) * time.Millisecond)
 		if attempt <= 1 {
@@ -73,7 +73,8 @@ func retryOnceBackoffTest(t *testing.T) {
 
 func maxRetriesTest(t *testing.T) {
 	handler := NewRateLimitHandler(&xrpc.Client{})
-	assert.Equal(t, maxRetries(), handler.maxRetries)
+	conf := NewConf()
+	assert.Equal(t, conf.MaxRetries(), handler.maxRetries)
 	assert.Equal(t, DEFAULT_MAX_RETRIES, handler.maxRetries)
 }
 
@@ -82,7 +83,7 @@ func maxRetriesExceededTest(t *testing.T) {
 	handler.maxRetries = 2
 	reset := time.Now().UTC()
 	attempt := 0
-	err := handler.executeWithRetry(context.Background(), ReadOperation, func() error {
+	err := handler.withRetry(context.Background(), ReadOperation, func() error {
 		attempt++
 		reset = reset.Add(time.Duration(attempt) * time.Millisecond)
 		return &xrpc.Error{
@@ -105,7 +106,7 @@ func retryContextCancelledTest(t *testing.T) {
 	defer cancel()
 
 	attempt := 0
-	err := handler.executeWithRetry(ctx, ReadOperation, func() error {
+	err := handler.withRetry(ctx, ReadOperation, func() error {
 		attempt++
 		return &xrpc.Error{
 			StatusCode: http.StatusTooManyRequests,
@@ -125,7 +126,7 @@ func resetDeadlineTest(t *testing.T) {
 	handler := NewRateLimitHandler(&xrpc.Client{})
 	reset := time.Now().UTC()
 	attempt := 0
-	err := handler.executeWithRetry(context.Background(), ReadOperation, func() error {
+	err := handler.withRetry(context.Background(), ReadOperation, func() error {
 		attempt++
 		reset = reset.Add(time.Duration(attempt) * time.Millisecond)
 		return &xrpc.Error{
@@ -150,7 +151,7 @@ func exponentialBackoffTest(t *testing.T, op OperationType) {
 	handler.readBaseWaitTime = time.Millisecond
 	handler.writeBaseWaitTime = 2 * time.Millisecond
 	start := time.Now().UTC()
-	err := handler.executeWithRetry(context.Background(), op, func() error {
+	err := handler.withRetry(context.Background(), op, func() error {
 		return &xrpc.Error{
 			StatusCode: http.StatusTooManyRequests,
 		}
@@ -168,7 +169,7 @@ func exponentialBackoffWithRetryMaxTest(t *testing.T, op OperationType) {
 	handler.readBaseWaitTime = time.Millisecond
 	handler.writeBaseWaitTime = 2 * time.Millisecond
 	start := time.Now().UTC()
-	err := handler.executeWithRetry(context.Background(), op, func() error {
+	err := handler.withRetry(context.Background(), op, func() error {
 		return &xrpc.Error{
 			StatusCode: http.StatusTooManyRequests,
 		}

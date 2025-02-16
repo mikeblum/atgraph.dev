@@ -20,11 +20,11 @@ func (e *Engine) CreateConstraints(ctx context.Context) error {
 	}
 	for _, constraint := range constraints {
 		next := constraint
-		_, err := neo4j.ExecuteQuery(ctx, e.driver,
+		_, uidxErr := neo4j.ExecuteQuery(ctx, e.driver,
 			next,
 			nil, neo4j.EagerResultTransformer,
 			neo4j.ExecuteQueryWithDatabase(database()))
-		err = errors.Join(err)
+		err = errors.Join(err, uidxErr)
 	}
 	return err
 }

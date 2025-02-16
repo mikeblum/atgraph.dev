@@ -45,7 +45,7 @@ func (f *Firehose) Stream() error {
 
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, BSKY_WSS_URL, http.Header{})
 	if err != nil {
-		f.log.WithError(err, "Error connecting to bsky firehose", "url", BSKY_WSS_URL)
+		f.log.WithErrorMsg(err, "Error connecting to bsky firehose", "url", BSKY_WSS_URL)
 		return err
 	}
 	defer conn.Close()

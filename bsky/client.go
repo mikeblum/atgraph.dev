@@ -13,18 +13,18 @@ import (
 )
 
 type Client struct {
-	client  *xrpc.Client
+	atproto *xrpc.Client
+	conf    *Conf
 	session *atproto.ServerCreateSession_Output
 	log     *conf.Log
-
-	ingest func(ctx context.Context, stream <-chan *Item) error
+	cursor  *string
 }
 
 func New() (*Client, error) {
 	var err error
 	log := conf.NewLog()
 	if err = godotenv.Load(); err != nil {
-		log.WithError(err, "Error loading .env file")
+		log.WithErrorMsg(err, "Error loading .env file")
 	}
 	host := conf.GetEnv(ENV_BSKY_PDS_URL, BSKY_SOCIAL_URL)
 	client := &xrpc.Client{
@@ -35,7 +35,7 @@ func New() (*Client, error) {
 	password := conf.GetEnv(ENV_BSKY_PASSWORD, "")
 	if strings.TrimSpace(identifier) == "" || strings.TrimSpace(password) == "" {
 		err := fmt.Errorf("missing identifier or password")
-		log.WithError(err, "Error authenticating bsky client")
+		log.WithErrorMsg(err, "Error authenticating bsky client")
 		return nil, err
 	}
 
@@ -44,7 +44,7 @@ func New() (*Client, error) {
 		Identifier: identifier,
 		Password:   password,
 	}); err != nil {
-		log.WithError(err, "Error authenticating atproto client", "host", host, "did", identifier)
+		log.WithErrorMsg(err, "Error authenticating atproto client", "host", host, "did", identifier)
 		return nil, err
 	}
 
@@ -57,30 +57,26 @@ func New() (*Client, error) {
 	}
 
 	return &Client{
-		client:  client,
+		atproto: client,
+		conf:    NewConf(),
 		session: session,
 		log:     log,
 	}, nil
 }
 
-func (c *Client) Ingest(ingest func(ctx context.Context, stream <-chan *Item) error) *Client {
-	c.ingest = ingest
-	return c
-}
-
 func (c *Client) Profile() (*Profile, error) {
 	if c.session == nil {
 		err := fmt.Errorf("missing session")
-		c.log.WithError(err, "Missing atproto session")
+		c.log.WithErrorMsg(err, "Missing atproto session")
 		return nil, err
 	}
 	ctx := context.Background()
 	var profiles *bsky.ActorGetProfiles_Output
 	var err error
-	if profiles, err = bsky.ActorGetProfiles(ctx, c.client, []string{
+	if profiles, err = bsky.ActorGetProfiles(ctx, c.atproto, []string{
 		c.session.Did,
 	}); err != nil {
-		c.log.WithError(err, "Error fetching profile")
+		c.log.WithErrorMsg(err, "Error fetching profile")
 		return nil, err
 	}
 	return &Profile{

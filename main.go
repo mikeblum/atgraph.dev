@@ -12,12 +12,12 @@ func main() {
 	var client *bsky.Client
 	var err error
 	if client, err = bsky.New(); err != nil {
-		log.WithError(err, "Error creating bsky client")
+		log.WithErrorMsg(err, "Error creating bsky client")
 		exit()
 	}
 	var profile *bsky.Profile
 	if profile, err = client.Profile(); err != nil {
-		log.WithError(err, "Error fetching bsky profile")
+		log.WithErrorMsg(err, "Error fetching bsky profile")
 		exit()
 	}
 	log.With("profile", profile).Info("Fetched bsky profiles")

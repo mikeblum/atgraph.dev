@@ -13,7 +13,7 @@ func main() {
 	var err error
 
 	if err = firehose.Stream(); err != nil {
-		log.WithError(err, "Error slurping from bsky firehose")
+		log.WithErrorMsg(err, "Error slurping from bsky firehose")
 		exit()
 	}
 }
