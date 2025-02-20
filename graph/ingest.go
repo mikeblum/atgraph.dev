@@ -17,48 +17,38 @@ const (
 	APP_INGEST = "atproto-graph-viz:ingest"
 )
 
-func (e *Engine) Ingest(ctx context.Context, items chan bsky.RepoItem) error {
+func (e *Engine) Ingest(ctx context.Context, item bsky.RepoItem) error {
 	var err error
+
+	var records chan *neo4j.Record
+	if records, err = e.ingestItem(ctx, &item); records == nil || err != nil {
+		err = errors.Join(err, e.ingestionErr(&item))
+		return err
+	}
+
 	for {
 		select {
-		case <-ctx.Done():
-			return errors.Join(err, ctx.Err())
-		case item, ok := <-items:
+		case record, ok := <-records:
 			if !ok {
-				// Channel is closed, return any accumulated errors
+				e.log.With(
+					"action", "ingest",
+					"engine", "neo4j",
+					"type", "item",
+					"did", item.DID,
+				).Debug("records channel closed, stopping ingest...")
 				return err
 			}
+			e.log.With(
+				"record", record.AsMap(),
+				"nsid", item.NSID.String(),
+				"did", item.DID.String(),
+				"action", "ingest",
+				"engine", "neo4j",
+			).Info("Ingested bsky item")
 
-			var records chan *neo4j.Record
-			if records, err = e.ingestItem(ctx, &item); records == nil || err != nil {
-				err = errors.Join(err, e.ingestionErr(&item))
-				continue
-			}
-			// Process records with context awareness
-		recordLoop:
-			for {
-				select {
-				case record, ok := <-records:
-					if !ok {
-						break recordLoop
-					}
-					e.log.With(
-						"record", record.AsMap(),
-						"nsid", item.NSID.String(),
-						"did", item.DID.String(),
-						"action", "ingest",
-						"engine", "neo4j",
-					).Info("Ingested bsky item")
-
-				case <-ctx.Done():
-					return errors.Join(err, ctx.Err())
-				}
-			}
+		case <-ctx.Done():
+			return errors.Join(err, ctx.Err())
 		}
-		e.log.With(
-			"action", "ingest",
-			"engine", "neo4j",
-		).Debug("Awaiting items to ingest")
 	}
 }
 
