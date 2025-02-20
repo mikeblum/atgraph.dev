@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/bluesky-social/indigo/api/atproto"
@@ -22,16 +23,25 @@ type WorkerPool struct {
 	jobs        chan RepoJob
 	items       chan RepoItem
 	results     chan error
-	jobCount    int64
+	jobCount    atomic.Int64
 	poolReady   chan bool
 	ingestReady chan bool
 	done        chan bool
 	rateLimiter *RateLimitHandler
+	metrics     *WorkerMetrics
 	ingest      func(context.Context, RepoItem) error
 	workerCount int
 }
 
-func NewWorkerPool(client *Client, conf *Conf) *WorkerPool {
+func NewWorkerPool(ctx context.Context, client *Client, conf *Conf) (*WorkerPool, error) {
+	rateLimit, err := NewRateLimitHandler(ctx, client.atproto)
+	if err != nil {
+		return nil, err
+	}
+	metrics, err := NewWorkerMetrics(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return &WorkerPool{
 		client:      client,
 		log:         log.NewLog(),
@@ -41,9 +51,10 @@ func NewWorkerPool(client *Client, conf *Conf) *WorkerPool {
 		poolReady:   make(chan bool),
 		ingestReady: make(chan bool),
 		done:        make(chan bool),
-		rateLimiter: NewRateLimitHandler(client.atproto),
+		rateLimiter: rateLimit,
+		metrics:     metrics,
 		workerCount: conf.WorkerCount(),
-	}
+	}, nil
 }
 
 func (p *WorkerPool) StartMonitor(ctx context.Context) *WorkerPool {
@@ -56,10 +67,8 @@ func (p *WorkerPool) StartMonitor(ctx context.Context) *WorkerPool {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				p.log.Info("Worker pool status",
-					"jobs_queued", len(p.jobs),
-					"items_queued", len(p.items),
-					"results_queued", len(p.results))
+				p.metrics.jobsQueued.Record(ctx, int64(len(p.jobs)))
+				p.metrics.itemsQueued.Record(ctx, int64(len(p.items)))
 			}
 		}
 	}()
@@ -105,7 +114,6 @@ func (p *WorkerPool) Start(ctx context.Context) error {
 		})
 	}
 
-	// Handle shutdown
 	go func() {
 		<-ctx.Done()
 		close(p.done)

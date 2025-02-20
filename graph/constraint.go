@@ -23,7 +23,7 @@ func (e *Engine) CreateConstraints(ctx context.Context) error {
 		_, uidxErr := neo4j.ExecuteQuery(ctx, e.driver,
 			next,
 			nil, neo4j.EagerResultTransformer,
-			neo4j.ExecuteQueryWithDatabase(database()))
+			neo4j.ExecuteQueryWithDatabase(e.conf.database()))
 		err = errors.Join(err, uidxErr)
 	}
 	return err

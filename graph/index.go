@@ -25,7 +25,7 @@ func (e *Engine) CreateIndexes(ctx context.Context) error {
 		_, idxErr := neo4j.ExecuteQuery(ctx, e.driver,
 			next,
 			nil, neo4j.EagerResultTransformer,
-			neo4j.ExecuteQueryWithDatabase(database()))
+			neo4j.ExecuteQueryWithDatabase(e.conf.database()))
 		err = errors.Join(err, idxErr)
 	}
 	return err
