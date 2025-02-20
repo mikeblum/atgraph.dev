@@ -2,6 +2,7 @@ package o11y
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/mikeblum/atproto-graph-viz/conf"
@@ -18,24 +19,25 @@ const (
 	ServiceName = "atproto-graph-viz"
 )
 
-func NewO11yLocal(ctx context.Context, log *conf.Log) (*otlpmetricgrpc.Exporter, error) {
+func NewO11y(ctx context.Context, log *conf.Log) (*otlpmetricgrpc.Exporter, error) {
 	// configure global error log handler
 	otel.SetErrorHandler(NewOTELErrorHandler(log.Logger))
+
+	cfg := NewConf()
 
 	var res *resource.Resource
 	var err error
 	if res, err = resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(ServiceName),
-			semconv.DeploymentEnvironment("local"),
+			semconv.DeploymentEnvironment(cfg.env()),
 		),
 	); err != nil {
 		return nil, err
 	}
 	var exporter *otlpmetricgrpc.Exporter
 	if exporter, err = otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint(o11yEndpoint()),
-		otlpmetricgrpc.WithInsecure(),
+		otlpmetricgrpc.WithEndpointURL(cfg.o11yEndpoint()),
 		otlpmetricgrpc.WithRetry(otlpmetricgrpc.RetryConfig{
 			Enabled:         true,
 			InitialInterval: 1 * time.Second,
@@ -85,6 +87,11 @@ func NewO11yLocal(ctx context.Context, log *conf.Log) (*otlpmetricgrpc.Exporter,
 	return exporter, nil
 }
 
-func o11yEndpoint() string {
-	return conf.GetEnv(ENV_OTEL_EXPORTER_OTLP_ENDPOINT, DEFAULT_OTEL_OTLP_ENDPOINT)
+func Cleanup(ctx context.Context) error {
+	if provider, ok := otel.GetMeterProvider().(*sdk.MeterProvider); ok {
+		if err := provider.Shutdown(ctx); err != nil {
+			return fmt.Errorf("failed to shutdown meter provider: %w", err)
+		}
+	}
+	return nil
 }

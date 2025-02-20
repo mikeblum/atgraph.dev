@@ -38,10 +38,12 @@ func TestRateLimit(t *testing.T) {
 }
 
 func retryOnceDeadlineTest(t *testing.T) {
-	handler := NewRateLimitHandler(&xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	assert.Nil(t, err)
+	assert.NotNil(t, handler)
 	var attempt int
 	reset := time.Now().UTC()
-	err := handler.withRetry(context.Background(), ReadOperation, opName, func() error {
+	err = handler.withRetry(context.Background(), ReadOperation, opName, func() error {
 		attempt++
 		reset = reset.Add(time.Duration(attempt) * time.Millisecond)
 		if attempt <= 1 {
@@ -59,10 +61,12 @@ func retryOnceDeadlineTest(t *testing.T) {
 }
 
 func retryOnceBackoffTest(t *testing.T) {
-	handler := NewRateLimitHandler(&xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	assert.Nil(t, err)
+	assert.NotNil(t, handler)
 	var attempt int
 	reset := time.Now().UTC()
-	err := handler.withRetry(context.Background(), ReadOperation, opName, func() error {
+	err = handler.withRetry(context.Background(), ReadOperation, opName, func() error {
 		attempt++
 		reset = reset.Add(time.Duration(attempt) * time.Millisecond)
 		if attempt <= 1 {
@@ -76,18 +80,22 @@ func retryOnceBackoffTest(t *testing.T) {
 }
 
 func maxRetriesTest(t *testing.T) {
-	handler := NewRateLimitHandler(&xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	assert.Nil(t, err)
+	assert.NotNil(t, handler)
 	conf := NewConf()
 	assert.Equal(t, conf.MaxRetries(), handler.maxRetries)
 	assert.Equal(t, DEFAULT_MAX_RETRIES, handler.maxRetries)
 }
 
 func maxRetriesExceededTest(t *testing.T) {
-	handler := NewRateLimitHandler(&xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	assert.Nil(t, err)
+	assert.NotNil(t, handler)
 	handler.maxRetries = 2
 	reset := time.Now().UTC()
 	attempt := 0
-	err := handler.withRetry(context.Background(), ReadOperation, opName, func() error {
+	err = handler.withRetry(context.Background(), ReadOperation, opName, func() error {
 		attempt++
 		reset = reset.Add(time.Duration(attempt) * time.Millisecond)
 		return &xrpc.Error{
@@ -105,12 +113,14 @@ func maxRetriesExceededTest(t *testing.T) {
 }
 
 func retryContextCancelledTest(t *testing.T) {
-	handler := NewRateLimitHandler(&xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	assert.Nil(t, err)
+	assert.NotNil(t, handler)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	attempt := 0
-	err := handler.withRetry(ctx, ReadOperation, opName, func() error {
+	err = handler.withRetry(ctx, ReadOperation, opName, func() error {
 		attempt++
 		return &xrpc.Error{
 			StatusCode: http.StatusTooManyRequests,
@@ -127,10 +137,12 @@ func retryContextCancelledTest(t *testing.T) {
 }
 
 func resetDeadlineTest(t *testing.T) {
-	handler := NewRateLimitHandler(&xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	assert.Nil(t, err)
+	assert.NotNil(t, handler)
 	reset := time.Now().UTC()
 	attempt := 0
-	err := handler.withRetry(context.Background(), ReadOperation, opName, func() error {
+	err = handler.withRetry(context.Background(), ReadOperation, opName, func() error {
 		attempt++
 		reset = reset.Add(time.Duration(attempt) * time.Millisecond)
 		return &xrpc.Error{
@@ -148,14 +160,16 @@ func resetDeadlineTest(t *testing.T) {
 }
 
 func exponentialBackoffTest(t *testing.T, op OperationType) {
-	handler := NewRateLimitHandler(&xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	assert.Nil(t, err)
+	assert.NotNil(t, handler)
 	// disable max retries
 	handler.maxRetries = 0
 	handler.maxWaitTime = 5 * time.Second
 	handler.readBaseWaitTime = time.Millisecond
 	handler.writeBaseWaitTime = 2 * time.Millisecond
 	start := time.Now().UTC()
-	err := handler.withRetry(context.Background(), op, opName, func() error {
+	err = handler.withRetry(context.Background(), op, opName, func() error {
 		return &xrpc.Error{
 			StatusCode: http.StatusTooManyRequests,
 		}
@@ -166,14 +180,16 @@ func exponentialBackoffTest(t *testing.T, op OperationType) {
 }
 
 func exponentialBackoffWithRetryMaxTest(t *testing.T, op OperationType) {
-	handler := NewRateLimitHandler(&xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	assert.Nil(t, err)
+	assert.NotNil(t, handler)
 	// disable max retries
 	handler.maxRetries = 5
 	handler.maxWaitTime = time.Second
 	handler.readBaseWaitTime = time.Millisecond
 	handler.writeBaseWaitTime = 2 * time.Millisecond
 	start := time.Now().UTC()
-	err := handler.withRetry(context.Background(), op, opName, func() error {
+	err = handler.withRetry(context.Background(), op, opName, func() error {
 		return &xrpc.Error{
 			StatusCode: http.StatusTooManyRequests,
 		}

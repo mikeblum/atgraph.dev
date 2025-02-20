@@ -1,48 +1,91 @@
 services:
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    container_name: jaeger
-    ports:
-      - "4317:4317"       # OTLP gRPC
-      - "4318:4318"       # OTLP HTTP
-      - "5778:5778"       # Jaeger admin port
-      - "16686:16686"     # Jaeger UI
-    environment:
-      COLLECTOR_OTLP_ENABLED: true
-      MEMORY_MAX_TRACES: 100000
-      QUERY_BASE_PATH: /jaeger
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yml"]
     volumes:
-      - jaeger-data:/badger 
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "13133:13133" # OTEL collector health check
     networks:
-      - monitoring_net
+      - atproto-graph-viz-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:16686 || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:13133"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      - jaeger
+      - prometheus
+    restart: unless-stopped
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - atproto-graph-viz-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 5s
     restart: unless-stopped
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "16686:16686"     # UI
+    environment:
+      MEMORY_MAX_TRACES: 100000
+    networks:
+      - atproto-graph-viz-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:16686"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s 
+    restart: unless-stopped
+
   neo4j:
-    image: neo4j:5.26.2-community-bullseye
+    image: neo4j:5.26.2-enterprise-bullseye
     container_name: neo4j
     ports:
+      - "2004:2004"
       - "7474:7474"
       - "7687:7687"
     environment:
-      NEO4J_AUTH: none
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: yes  
+      NEO4J_dbms_usage__report_enabled: false
+      NEO4J_dbms_security_auth__enabled: false
       NEO4J_initial_dbms_default__database: bluesky
       NEO4J_server_bolt_telemetry_enabled: true
-      NEO4J_dbms_usage__report_enabled: false
-      # query.log gated in enterprise edition
+      NEO4J_server_memory_pagecache_size: 2G 
+      NEO4J_server_jvm_additional: "-Dlog4j.configurationFile=file:/conf/log4j2.xml"
+      NEO4J_server_metrics_prometheus_enabled: true
+      NEO4J_server_metrics_prometheus_endpoint: :2004
       NEO4J_db_logs_query_enabled: INFO
+      NEO4J_db_logs_query_threshold: 0s
     volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+      - ./neo4j:/conf
     networks:
-      - neo4j_net
+      - atproto-graph-viz-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7687 || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:7687"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -50,14 +93,11 @@ services:
     restart: unless-stopped
 
 volumes:
-  jaeger-data:
-  neo4j_data:
-  neo4j_logs:
+  neo4j-data:
+  neo4j-logs:
+  prometheus-data:
 
 networks:
-  monitoring_net:
-    name: monitoring
-    driver: bridge
-  neo4j_net:
-    name: neo4j
+  atproto-graph-viz-net:
+    name: atproto-graph-viz-net
     driver: bridge

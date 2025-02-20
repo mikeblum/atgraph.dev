@@ -3,7 +3,6 @@ package bsky
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"golang.org/x/sync/errgroup"
@@ -27,7 +26,7 @@ func (c *Client) BackfillRepos(ctx context.Context, pool *WorkerPool) error {
 				if err != nil {
 					return err
 				}
-				if atomic.AddInt64(&pool.jobCount, -1) == 0 {
+				if pool.jobCount.Add(-1) == 0 {
 					defer close(done)
 					return nil
 				}
@@ -46,13 +45,12 @@ func (c *Client) BackfillRepos(ctx context.Context, pool *WorkerPool) error {
 		}
 	}
 
-	// repos ingest complete or cancelled
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-done:
-		return nil
-	}
+	go func() {
+		<-ctx.Done()
+		close(done)
+	}()
+
+	return g.Wait()
 }
 
 func (c *Client) listRepos(ctx context.Context, next *string, page int, pool *WorkerPool) (*string, error) {
@@ -79,13 +77,13 @@ func (c *Client) listRepos(ctx context.Context, next *string, page int, pool *Wo
 		}
 
 		// Increment count before submitting
-		atomic.AddInt64(&pool.jobCount, 1)
+		pool.jobCount.Add(1)
 
 		if err = pool.Submit(ctx, RepoJob{
 			repo: repo,
 		}); err != nil {
 			// Decrement count on submission failure
-			atomic.AddInt64(&pool.jobCount, -1)
+			pool.jobCount.Add(-1)
 			c.log.WithErrorMsg(err, "Error submitting bsky repo for ingestion", "did", repo.Did)
 		}
 	}

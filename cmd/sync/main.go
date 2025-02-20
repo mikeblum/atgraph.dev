@@ -8,7 +8,6 @@ import (
 	"github.com/mikeblum/atproto-graph-viz/conf"
 	"github.com/mikeblum/atproto-graph-viz/graph"
 	"github.com/mikeblum/atproto-graph-viz/o11y"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 )
 
 func main() {
@@ -19,16 +18,16 @@ func main() {
 	var err error
 
 	// configure o11y
-	var exporter *otlpmetricgrpc.Exporter
-	if exporter, err = o11y.NewO11yLocal(ctx, log); err != nil {
-		log.WithErrorMsg(err, "Error bootstrapping OTEL o11y", "mode", "local")
+	if _, err = o11y.NewO11y(ctx, log); err != nil {
+		log.WithErrorMsg(err, "Error bootstrapping OTEL o11y")
 		exit()
 	}
-	defer func() {
-		if err := exporter.Shutdown(ctx); err != nil {
-			log.WithError(err).Error("failed to shutdown OTEL exporter")
-		}
-	}()
+	defer o11y.Cleanup(ctx)
+
+	if err = registerO11y(ctx); err != nil {
+		log.WithErrorMsg(err, "Error registering OTEL o11y")
+		exit()
+	}
 
 	var engine *graph.Engine
 	if engine, err = graph.Bootstrap(ctx); err != nil {
@@ -56,7 +55,12 @@ func main() {
 	}
 
 	// bootstrap worker pool
-	pool := bsky.NewWorkerPool(client, bsky.NewConf()).StartMonitor(ctx).WithIngest(engine.Ingest)
+	var pool *bsky.WorkerPool
+	if pool, err = bsky.NewWorkerPool(ctx, client, bsky.NewConf()); err != nil {
+		log.WithErrorMsg(err, "Error initing worker pool")
+		exit()
+	}
+	pool.StartMonitor(ctx).WithIngest(engine.Ingest)
 	go func() {
 		log.Info("Starting worker pool...")
 		if err = pool.Start(ctx); err != nil {
@@ -107,4 +111,19 @@ func main() {
 
 func exit() {
 	os.Exit(1)
+}
+
+func registerO11y(ctx context.Context) error {
+	var err error
+	log := conf.NewLog()
+	// register metrics
+	if _, err = bsky.NewRateLimitMetrics(ctx); err != nil {
+		log.WithErrorMsg(err, "Error bootstrapping metrics", "type", "rate-limit")
+		return err
+	}
+	if _, err = bsky.NewWorkerMetrics(ctx); err != nil {
+		log.WithErrorMsg(err, "Error bootstrapping metrics", "type", "worker")
+		return err
+	}
+	return nil
 }

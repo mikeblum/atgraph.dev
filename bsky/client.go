@@ -8,7 +8,6 @@ import (
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/xrpc"
-	"github.com/joho/godotenv"
 	"github.com/mikeblum/atproto-graph-viz/conf"
 )
 
@@ -23,17 +22,14 @@ type Client struct {
 func New() (*Client, error) {
 	var err error
 	log := conf.NewLog()
-	if err = godotenv.Load(); err != nil {
-		log.WithErrorMsg(err, "Error loading .env file")
-	}
-	host := conf.GetEnv(ENV_BSKY_PDS_URL, BSKY_SOCIAL_URL)
+
+	cfg := NewConf()
+
 	client := &xrpc.Client{
-		Host: host,
+		Host: cfg.host(),
 	}
 
-	identifier := conf.GetEnv(ENV_BSKY_IDENTIFIER, "")
-	password := conf.GetEnv(ENV_BSKY_PASSWORD, "")
-	if strings.TrimSpace(identifier) == "" || strings.TrimSpace(password) == "" {
+	if strings.TrimSpace(cfg.identifier()) == "" || strings.TrimSpace(cfg.password()) == "" {
 		err := fmt.Errorf("missing identifier or password")
 		log.WithErrorMsg(err, "Error authenticating bsky client")
 		return nil, err
@@ -41,10 +37,10 @@ func New() (*Client, error) {
 
 	var session *atproto.ServerCreateSession_Output
 	if session, err = atproto.ServerCreateSession(context.Background(), client, &atproto.ServerCreateSession_Input{
-		Identifier: identifier,
-		Password:   password,
+		Identifier: cfg.identifier(),
+		Password:   cfg.password(),
 	}); err != nil {
-		log.WithErrorMsg(err, "Error authenticating atproto client", "host", host, "did", identifier)
+		log.WithErrorMsg(err, "Error authenticating atproto client", "host", cfg.host(), "did", cfg.identifier())
 		return nil, err
 	}
 

@@ -121,7 +121,7 @@ func (e *Engine) ingestionErr(item *bsky.RepoItem) error {
 
 func (e *Engine) ingestProfile(ctx context.Context, item *bsky.RepoItem, actor *bskyItem.ActorProfile) (chan *neo4j.Record, error) {
 	records := make(chan *neo4j.Record, 1)
-	session := e.driver.NewSession(ctx, e.config)
+	session := e.driver.NewSession(ctx, e.session)
 	defer session.Close(ctx)
 	group, ctx := errgroup.WithContext(ctx)
 	group.Go(func() error {
@@ -168,7 +168,7 @@ func (e *Engine) ingestProfile(ctx context.Context, item *bsky.RepoItem, actor *
 				}
 				return records, nil
 			},
-			neo4j.WithTxTimeout(timeout()),
+			neo4j.WithTxTimeout(e.conf.timeout()),
 			neo4j.WithTxMetadata(map[string]any{"app": APP_INGEST}))
 		if err != nil {
 			e.log.WithErrorMsg(err, "Error ingesting :Profile", "id", item.DID.String(), "action", "ingest")

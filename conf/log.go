@@ -6,6 +6,13 @@ import (
 	"strconv"
 )
 
+const (
+	ENV_LOG_LEVEL = "LOG_LEVEL"
+
+	// defaults
+	LOG_LEVEL_INFO = "info"
+)
+
 type Log struct {
 	*slog.Logger
 }
@@ -17,8 +24,9 @@ func NewLog() *Log {
 
 func newLog(level slog.Level) *Log {
 	logLevel := level
+	cfg := NewEnvConf()
 	// override log level if set in env
-	if envLevelStr := GetEnv(ENV_LOG_LEVEL, LOG_LEVEL_INFO); envLevelStr != "" {
+	if envLevelStr := cfg.GetEnv(ENV_LOG_LEVEL, LOG_LEVEL_INFO); envLevelStr != "" {
 		envLevel, err := strconv.Atoi(envLevelStr)
 		if err == nil {
 			logLevel = slog.Level(envLevel)

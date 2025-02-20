@@ -49,17 +49,25 @@ type RateLimitHandler struct {
 }
 
 // NewRateLimitHandler - default rate limt
-func NewRateLimitHandler(client *xrpc.Client) *RateLimitHandler {
+func NewRateLimitHandler(ctx context.Context, client *xrpc.Client) (*RateLimitHandler, error) {
+	var err error
 	conf := NewConf()
+	log := log.NewLog()
+	var metrics *RateLimitMetrics
+	if metrics, err = NewRateLimitMetrics(ctx); err != nil {
+		log.WithErrorMsg(err, "Error bootstrapping metrics", "type", "rate-limit")
+		return nil, err
+	}
 	return &RateLimitHandler{
 		client:            client,
 		conf:              conf,
-		log:               log.NewLog(),
+		log:               log,
 		maxRetries:        conf.MaxRetries(),
 		maxWaitTime:       30 * time.Second,       // 30s retry deadline
 		readBaseWaitTime:  500 * time.Millisecond, // 500ms for read operations
 		writeBaseWaitTime: 1 * time.Second,        // 1s for write operations
-	}
+		metrics:           metrics,
+	}, nil
 }
 
 // executeWithRetry executes an API call with rate limit handling
