@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -13,7 +14,16 @@ import (
 	"github.com/ipfs/go-cid"
 )
 
+type RepoJob struct {
+	repo *atproto.SyncListRepos_Repo
+}
+
+type RepoJobOut struct {
+	repo *repo.Repo
+}
+
 type RepoItem struct {
+	repo    *repo.Repo
 	Data    any                `json:"data"`
 	DID     syntax.DID         `json:"did"`
 	Err     error              `json:"err"`
@@ -38,21 +48,19 @@ func (e *LexiconError) Error() string {
 	return fmt.Sprintf("TODO: unsupported lexicon: %s", e.nsid.String())
 }
 
-func resolveLexicon(ctx context.Context, ident *identity.Identity, out RepoJobOut) error {
-	// close out items
-	defer close(out.items)
+func resolveLexicon(ctx context.Context, ident *identity.Identity, r *repo.Repo, items chan RepoItem) error {
 	// extract DID from repo commit
 	var did syntax.DID
 	var err error
-	sc := out.repo.SignedCommit()
+	sc := r.SignedCommit()
 	if did, err = syntax.ParseDID(sc.Did); err != nil {
 		return err
 	}
-	err = out.repo.ForEach(ctx, "", func(k string, v cid.Cid) error {
+	err = r.ForEach(ctx, "", func(k string, v cid.Cid) error {
 		var data any
 		var ok bool
 		var rec repo.CborMarshaler
-		if _, rec, err = out.repo.GetRecord(ctx, k); err != nil {
+		if _, rec, err = r.GetRecord(ctx, k); err != nil {
 			return err
 		}
 		nsid := syntax.NSID(strings.SplitN(k, "/", 2)[0]).Normalize()
@@ -111,7 +119,8 @@ func resolveLexicon(ctx context.Context, ident *identity.Identity, out RepoJobOu
 			return lexiconErr
 		}
 
-		out.items <- RepoItem{
+		items <- RepoItem{
+			repo:    r,
 			Data:    data,
 			Rev:     sc.Rev,
 			Sig:     base64.StdEncoding.EncodeToString(sc.Sig),

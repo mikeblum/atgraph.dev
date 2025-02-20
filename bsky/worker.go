@@ -16,32 +16,18 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type RepoJob struct {
-	repo     *atproto.SyncListRepos_Repo
-	workerID *int
-}
-
-type RepoJobOut struct {
-	repo  *repo.Repo
-	items chan RepoItem
-}
-
-type IngestJobOut struct {
-	ID       string
-	err      error
-	workerID *int
-}
-
 type WorkerPool struct {
 	client      *Client
 	log         *log.Log
 	jobs        chan RepoJob
-	ingests     chan RepoJobOut
+	items       chan RepoItem
+	results     chan error
+	jobCount    int64
 	poolReady   chan bool
 	ingestReady chan bool
 	done        chan bool
 	rateLimiter *RateLimitHandler
-	ingest      func(context.Context, chan RepoItem) error
+	ingest      func(context.Context, RepoItem) error
 	workerCount int
 }
 
@@ -50,7 +36,8 @@ func NewWorkerPool(client *Client, conf *Conf) *WorkerPool {
 		client:      client,
 		log:         log.NewLog(),
 		jobs:        make(chan RepoJob, conf.WorkerCount()*2),
-		ingests:     make(chan RepoJobOut, conf.WorkerCount()*2),
+		items:       make(chan RepoItem, conf.WorkerCount()*2),
+		results:     make(chan error, conf.WorkerCount()*2),
 		poolReady:   make(chan bool),
 		ingestReady: make(chan bool),
 		done:        make(chan bool),
@@ -71,7 +58,8 @@ func (p *WorkerPool) StartMonitor(ctx context.Context) *WorkerPool {
 			case <-ticker.C:
 				p.log.Info("Worker pool status",
 					"jobs_queued", len(p.jobs),
-					"ingests_queued", len(p.ingests))
+					"items_queued", len(p.items),
+					"results_queued", len(p.results))
 			}
 		}
 	}()
@@ -90,7 +78,7 @@ func (p *WorkerPool) Size() int {
 	return len(p.jobs)
 }
 
-func (p *WorkerPool) WithIngest(ingest func(context.Context, chan RepoItem) error) *WorkerPool {
+func (p *WorkerPool) WithIngest(ingest func(context.Context, RepoItem) error) *WorkerPool {
 	p.ingest = ingest
 	return p
 }
@@ -101,7 +89,7 @@ func (p *WorkerPool) Start(ctx context.Context) error {
 
 	p.log.Info("Starting worker pool", "worker_count", p.workerCount)
 
-	// Start repo workers with explicit worker IDs
+	// Start repo workers
 	for i := 0; i < p.workerCount; i++ {
 		workerID := i + 1
 		g.Go(func() error {
@@ -109,7 +97,7 @@ func (p *WorkerPool) Start(ctx context.Context) error {
 		})
 	}
 
-	// Start ingest workers with explicit worker IDs
+	// Start ingest workers
 	for i := 0; i < p.workerCount; i++ {
 		workerID := i + 1
 		g.Go(func() error {
@@ -147,38 +135,40 @@ func (p *WorkerPool) Submit(ctx context.Context, job RepoJob) error {
 }
 
 func (p *WorkerPool) ingestWorker(ctx context.Context, workerID int) error {
-	p.log.Info("Worker started", "worker-type", "ingest", "worker-id", workerID)
-	defer p.log.Info("Worker shutting down", "worker-type", "ingest", "worker-id", workerID)
+	p.log.Info("Worker started", "type", "ingest", "worker-id", workerID)
+	defer p.log.Info("Worker shutting down", "type", "ingest", "worker-id", workerID)
 
 	for {
 		select {
 		case <-ctx.Done():
-			p.log.Info("Context cancelled", "worker-type", "ingest", "worker-id", workerID)
+			p.log.Info("Context cancelled", "type", "ingest", "worker-id", workerID)
 			return ctx.Err()
 		case <-p.done:
-			p.log.Info("Done channel closed", "worker-type", "ingest", "worker-id", workerID)
+			p.log.Info("Done channel closed", "type", "ingest", "worker-id", workerID)
 			return nil
-		case ingest, ok := <-p.ingests:
+		case item, ok := <-p.items:
 			if !ok {
-				p.log.Info("Ingest channel closed", "worker-type", "ingest", "worker-id", workerID)
+				p.log.Info("Ingest channel closed", "type", "ingest", "worker-id", workerID)
 				return nil
 			}
 
 			p.log.Info("Processing ingest",
 				"action", "ingest",
 				"worker-id", workerID,
-				"did", ingest.repo.RepoDid())
+				"did", item.repo.RepoDid())
 
 			err := p.rateLimiter.withRetry(ctx, WriteOperation, "ingest", func() error {
-				return p.ingest(ctx, ingest.items)
+				return p.ingest(ctx, item)
 			})
 
 			if err != nil {
 				p.log.WithErrorMsg(err, "Retries exhausted",
 					"action", "ingest",
 					"worker-id", workerID,
-					"did", ingest.repo.RepoDid())
+					"did", item.repo.RepoDid())
 			}
+
+			p.results <- err
 		}
 	}
 }
@@ -190,19 +180,20 @@ func (p *WorkerPool) repoWorker(ctx context.Context, workerID int) error {
 	for {
 		select {
 		case <-ctx.Done():
-			p.log.Info("Context cancelled", "worker-id", workerID)
+			p.log.Info("Context cancelled", "type", "repo", "worker-id", workerID)
 			return ctx.Err()
 		case <-p.done:
-			p.log.Info("Done channel closed", "worker-id", workerID)
+			p.log.Info("Done channel closed", "type", "repo", "worker-id", workerID)
 			return nil
 		case job, ok := <-p.jobs:
 			if !ok {
-				p.log.Info("Jobs channel closed", "worker-id", workerID)
+				p.log.Info("Jobs channel closed", "type", "repo", "worker-id", workerID)
 				return nil
 			}
 
 			p.log.Info("Processing job",
-				"action", "repo",
+				"action", "get-repo",
+				"type", "repo",
 				"worker-id", workerID,
 				"did", job.repo.Did)
 
@@ -220,7 +211,8 @@ func (p *WorkerPool) repoWorker(ctx context.Context, workerID int) error {
 
 			if err != nil {
 				p.log.WithErrorMsg(err, "Retries exhausted",
-					"action", "repo",
+					"action", "get-repo",
+					"type", "repo",
 					"worker-id", workerID,
 					"did", job.repo.Did)
 			}
@@ -256,13 +248,8 @@ func (p *WorkerPool) getRepo(ctx context.Context, job RepoJob) error {
 		p.log.WithErrorMsg(err, "Error reading bsky repo")
 		return err
 	}
-	out := RepoJobOut{
-		repo:  r,
-		items: make(chan RepoItem, ITEMS_BUFFER),
-	}
 
-	// resolveLexicon can block if items > ITEMS_BUFFER
-	if err := resolveLexicon(ctx, ident, out); err != nil {
+	if err = resolveLexicon(ctx, ident, r, p.items); err != nil {
 		// Unwrap error to check if it's a LexiconError
 		if unwrappedErr := errors.Unwrap(err); unwrappedErr != nil {
 			var lexErr *LexiconError
@@ -274,11 +261,5 @@ func (p *WorkerPool) getRepo(ctx context.Context, job RepoJob) error {
 		}
 	}
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case p.ingests <- out:
-		p.log.With("did", job.repo.Did).Info("Enqueued repo for ingestion")
-	}
 	return nil
 }
