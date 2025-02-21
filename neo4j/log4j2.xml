@@ -1,23 +1,47 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="INFO">
+<Configuration status="WARN" monitorInterval="30">
     <Properties>
-        <Property name="server.directories.logs">/logs</Property>
+        <Property name="neo4j.logs">${sys:neo4j.home}/logs</Property>
     </Properties>
-    
+
     <Appenders>
-        <RollingRandomAccessFile name="QueryLog" 
-                               fileName="${server.directories.logs}/query.log"
-                               filePattern="${server.directories.logs}/query.log.%02i">
-            <JsonTemplateLayout eventTemplateUri="classpath:org/neo4j/logging/QueryLogJsonLayout.json"/>
+        <!-- Console appender with JSON layout -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <JsonLayout complete="false" compact="true" eventEol="true" properties="true"/>
+        </Console>
+
+        <!-- Main Neo4j log file -->
+        <RollingFile name="DefaultLog"
+                    fileName="${neo4j.logs}/neo4j.log"
+                    filePattern="${neo4j.logs}/neo4j.log.%02i">
+            <JsonLayout complete="false" compact="true" eventEol="true" properties="true"/>
             <Policies>
                 <SizeBasedTriggeringPolicy size="20 MB"/>
             </Policies>
-            <DefaultRolloverStrategy fileIndex="min" max="7"/>
-        </RollingRandomAccessFile>
+            <DefaultRolloverStrategy max="7"/>
+        </RollingFile>
+
+        <!-- Query log file -->
+        <RollingFile name="QueryLog"
+                    fileName="${neo4j.logs}/query.log"
+                    filePattern="${neo4j.logs}/query.log.%02i">
+            <JsonLayout complete="false" compact="true" eventEol="true" properties="true"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="20 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="7"/>
+        </RollingFile>
     </Appenders>
 
     <Loggers>
-        <Logger name="org.neo4j.server.security.audit.QueryLogger" level="INFO" additivity="false">
+        <!-- Root logger -->
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="DefaultLog"/>
+        </Root>
+
+        <!-- Query logger -->
+        <Logger name="org.neo4j.cypher.internal.runtime.QueryLogger" level="INFO" additivity="false">
             <AppenderRef ref="QueryLog"/>
         </Logger>
     </Loggers>

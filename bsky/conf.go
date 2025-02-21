@@ -38,7 +38,7 @@ func (c *Conf) PageSize() int {
 func (c *Conf) WorkerCount() int {
 	var pageSize int
 	var err error
-	if pageSize, err = strconv.Atoi(c.GetEnv(ENV_BSKY_REPO_WORKER_COUNT, strconv.Itoa(DEFAULT_WORKER_COUNT))); err != nil {
+	if pageSize, err = strconv.Atoi(c.GetEnv(ENV_BSKY_WORKER_COUNT, strconv.Itoa(DEFAULT_WORKER_COUNT))); err != nil {
 		pageSize = DEFAULT_WORKER_COUNT
 	}
 	return pageSize

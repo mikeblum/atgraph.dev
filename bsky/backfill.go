@@ -26,7 +26,8 @@ func (c *Client) BackfillRepos(ctx context.Context, pool *WorkerPool) error {
 				if err != nil {
 					return err
 				}
-				if pool.jobCount.Add(-1) == 0 {
+				pool.metrics.jobsInflight.Add(ctx, -1)
+				if pool.jobsInflight.Add(-1) == 0 {
 					defer close(done)
 					return nil
 				}
@@ -72,20 +73,24 @@ func (c *Client) listRepos(ctx context.Context, next *string, page int, pool *Wo
 	c.log.With("action", "list-repos", "next", next, "page", page, "page-size", pageSize, "repos", len(repos.Repos)).Info("Fetching Bluesky repos")
 
 	for _, repo := range repos.Repos {
-		if filterRepo(repo) {
-			continue
-		}
+		go func(repo *atproto.SyncListRepos_Repo) {
+			if filterRepo(repo) {
+				return
+			}
 
-		// Increment count before submitting
-		pool.jobCount.Add(1)
+			// Increment count before submitting
+			pool.jobsInflight.Add(1)
+			pool.metrics.jobsInflight.Add(ctx, 1)
 
-		if err = pool.Submit(ctx, RepoJob{
-			repo: repo,
-		}); err != nil {
-			// Decrement count on submission failure
-			pool.jobCount.Add(-1)
-			c.log.WithErrorMsg(err, "Error submitting bsky repo for ingestion", "did", repo.Did)
-		}
+			if err = pool.Submit(ctx, RepoJob{
+				repo: repo,
+			}); err != nil {
+				// Decrement count on submission failure
+				pool.jobsInflight.Add(-1)
+				pool.metrics.jobsInflight.Add(ctx, -1)
+				c.log.WithErrorMsg(err, "Error submitting bsky repo for ingestion", "did", repo.Did)
+			}
+		}(repo)
 	}
 
 	prev := c.cursor
