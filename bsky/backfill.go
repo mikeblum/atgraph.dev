@@ -3,15 +3,21 @@ package bsky
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"golang.org/x/sync/errgroup"
 )
 
 func (c *Client) BackfillRepos(ctx context.Context, pool *WorkerPool) error {
-	var page int
-	var next *string
-	var err error
+	var (
+		page int
+		next *string
+		err  error
+		wg   sync.WaitGroup
+		errs = make(chan error, 1)
+	)
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	done := make(chan bool)
@@ -35,23 +41,39 @@ func (c *Client) BackfillRepos(ctx context.Context, pool *WorkerPool) error {
 		}
 	})
 
-	// submit repos
 	for {
-		page = page + 1
-		if next, err = c.listRepos(ctx, next, page+1, pool); err != nil {
-			return err
-		}
-		if next == nil || *next == "" {
-			break
+		wg.Add(1)
+		page++
+
+		// Capture loop variables to prevent closure issues
+		currentPage := page
+		currentNext := next
+
+		go func() {
+			defer wg.Done()
+
+			if next, err = c.listRepos(ctx, currentNext, currentPage, pool); err != nil {
+				select {
+				case errs <- err:
+				default:
+				}
+				return
+			}
+
+			if next == nil || *next == "" {
+				select {
+				case errs <- nil:
+				default:
+				}
+			}
+		}()
+
+		select {
+		case err = <-errs:
+			wg.Wait()
+			return g.Wait()
 		}
 	}
-
-	go func() {
-		<-ctx.Done()
-		close(done)
-	}()
-
-	return g.Wait()
 }
 
 func (c *Client) listRepos(ctx context.Context, next *string, page int, pool *WorkerPool) (*string, error) {
