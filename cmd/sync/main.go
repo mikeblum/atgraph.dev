@@ -24,11 +24,6 @@ func main() {
 	}
 	defer o11y.Cleanup(ctx)
 
-	if err = registerO11y(ctx); err != nil {
-		log.WithErrorMsg(err, "Error registering OTEL o11y")
-		exit()
-	}
-
 	var engine *graph.Engine
 	if engine, err = graph.Bootstrap(ctx); err != nil {
 		log.WithErrorMsg(err, "Error bootstrapping neo4j driver")
@@ -49,7 +44,7 @@ func main() {
 		exit()
 	}
 
-	if client, err = bsky.New(); err != nil {
+	if client, err = bsky.NewClient(); err != nil {
 		log.WithErrorMsg(err, "Error creating bsky client")
 		exit()
 	}
@@ -62,7 +57,6 @@ func main() {
 	}
 	pool.StartMonitor(ctx).WithIngest(engine.Ingest)
 	go func() {
-		log.Info("Starting worker pool...")
 		if err = pool.Start(ctx); err != nil {
 			log.WithErrorMsg(err, "Error starting bsky worker pool")
 			cancel() // cancel context if worker pool fails to start
@@ -111,19 +105,4 @@ func main() {
 
 func exit() {
 	os.Exit(1)
-}
-
-func registerO11y(ctx context.Context) error {
-	var err error
-	log := conf.NewLog()
-	// register metrics
-	if _, err = bsky.NewRateLimitMetrics(ctx); err != nil {
-		log.WithErrorMsg(err, "Error bootstrapping metrics", "type", "rate-limit")
-		return err
-	}
-	if _, err = bsky.NewWorkerMetrics(ctx); err != nil {
-		log.WithErrorMsg(err, "Error bootstrapping metrics", "type", "worker")
-		return err
-	}
-	return nil
 }

@@ -11,7 +11,7 @@ func main() {
 	log := conf.NewLog()
 	var client *bsky.Client
 	var err error
-	if client, err = bsky.New(); err != nil {
+	if client, err = bsky.NewClient(); err != nil {
 		log.WithErrorMsg(err, "Error creating bsky client")
 		exit()
 	}

@@ -14,23 +14,25 @@ import (
 	"github.com/bluesky-social/indigo/repo"
 	"github.com/bluesky-social/indigo/xrpc"
 	log "github.com/mikeblum/atproto-graph-viz/conf"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/errgroup"
 )
 
 type WorkerPool struct {
-	client      *Client
-	log         *log.Log
-	jobs        chan RepoJob
-	items       chan RepoItem
-	results     chan error
-	jobCount    atomic.Int64
-	poolReady   chan bool
-	ingestReady chan bool
-	done        chan bool
-	rateLimiter *RateLimitHandler
-	metrics     *WorkerMetrics
-	ingest      func(context.Context, RepoItem) error
-	workerCount int
+	client       *Client
+	log          *log.Log
+	jobs         chan RepoJob
+	items        chan RepoItem
+	results      chan error
+	jobsInflight atomic.Int64
+	poolReady    chan bool
+	ingestReady  chan bool
+	done         chan bool
+	rateLimiter  *RateLimitHandler
+	metrics      *WorkerMetrics
+	ingest       func(context.Context, RepoItem) error
+	workerCount  int
 }
 
 func NewWorkerPool(ctx context.Context, client *Client, conf *Conf) (*WorkerPool, error) {
@@ -69,6 +71,7 @@ func (p *WorkerPool) StartMonitor(ctx context.Context) *WorkerPool {
 			case <-ticker.C:
 				p.metrics.jobsQueued.Record(ctx, int64(len(p.jobs)))
 				p.metrics.itemsQueued.Record(ctx, int64(len(p.items)))
+				p.metrics.resultsQueued.Record(ctx, int64(len(p.results)))
 			}
 		}
 	}()
@@ -96,7 +99,7 @@ func (p *WorkerPool) WithIngest(ingest func(context.Context, RepoItem) error) *W
 func (p *WorkerPool) Start(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	p.log.Info("Starting worker pool", "worker_count", p.workerCount)
+	p.log.Info("Starting worker pool", "worker-count", p.workerCount)
 
 	// Start repo workers
 	for i := 0; i < p.workerCount; i++ {
@@ -169,13 +172,19 @@ func (p *WorkerPool) ingestWorker(ctx context.Context, workerID int) error {
 				return p.ingest(ctx, item)
 			})
 
+			status := "ok"
 			if err != nil {
+				status = "err"
 				p.log.WithErrorMsg(err, "Retries exhausted",
 					"action", "ingest",
 					"worker-id", workerID,
 					"did", item.repo.RepoDid())
 			}
-
+			p.metrics.itemsCount.Add(ctx, 1, metric.WithAttributes(
+				attribute.Int("worker_id", workerID),
+				attribute.String("status", status),
+				attribute.String("action", "ingest"),
+			))
 			p.results <- err
 		}
 	}

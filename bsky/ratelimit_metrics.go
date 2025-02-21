@@ -27,7 +27,7 @@ type RateLimitMetrics struct {
 
 func NewRateLimitMetrics(ctx context.Context) (*RateLimitMetrics, error) {
 	meter := otel.GetMeterProvider().Meter(
-		"atproto_rate_limiter",
+		"atproto_rate_limit",
 		metric.WithInstrumentationVersion("0.1.0"),
 	)
 

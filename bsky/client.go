@@ -19,7 +19,7 @@ type Client struct {
 	cursor  *string
 }
 
-func New() (*Client, error) {
+func NewClient() (*Client, error) {
 	var err error
 	log := conf.NewLog()
 
