@@ -12,6 +12,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/repo"
+	"github.com/bluesky-social/indigo/util"
 	"github.com/bluesky-social/indigo/xrpc"
 	log "github.com/mikeblum/atproto-graph-viz/conf"
 	"go.opentelemetry.io/otel/attribute"
@@ -249,7 +250,8 @@ func (p *WorkerPool) getRepo(ctx context.Context, job RepoJob) error {
 		return err
 	}
 	xrpcc := xrpc.Client{
-		Host: ident.PDSEndpoint(),
+		Client: util.RobustHTTPClient(),
+		Host:   ident.PDSEndpoint(),
 	}
 	if xrpcc.Host == "" {
 		return fmt.Errorf("no PDS endpoint for identity: %s", atid)

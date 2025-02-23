@@ -7,6 +7,7 @@ import (
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
+	"github.com/bluesky-social/indigo/util"
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/mikeblum/atproto-graph-viz/conf"
 )
@@ -19,45 +20,55 @@ type Client struct {
 	cursor  *string
 }
 
-func NewClient() (*Client, error) {
-	var err error
-	log := conf.NewLog()
-
+// bsky/api for public api client usage
+// unauthenticated
+func NewAPIClient() *Client {
 	cfg := NewConf()
 
 	client := &xrpc.Client{
-		Host: cfg.host(),
-	}
-
-	if strings.TrimSpace(cfg.identifier()) == "" || strings.TrimSpace(cfg.password()) == "" {
-		err := fmt.Errorf("missing identifier or password")
-		log.WithErrorMsg(err, "Error authenticating bsky client")
-		return nil, err
-	}
-
-	var session *atproto.ServerCreateSession_Output
-	if session, err = atproto.ServerCreateSession(context.Background(), client, &atproto.ServerCreateSession_Input{
-		Identifier: cfg.identifier(),
-		Password:   cfg.password(),
-	}); err != nil {
-		log.WithErrorMsg(err, "Error authenticating atproto client", "host", cfg.host(), "did", cfg.identifier())
-		return nil, err
-	}
-
-	// set auth context
-	client.Auth = &xrpc.AuthInfo{
-		AccessJwt:  session.AccessJwt,
-		RefreshJwt: session.RefreshJwt,
-		Handle:     session.Handle,
-		Did:        session.Did,
+		Client: util.RobustHTTPClient(),
+		Host:   cfg.host(),
 	}
 
 	return &Client{
 		atproto: client,
-		conf:    NewConf(),
-		session: session,
-		log:     log,
-	}, nil
+		conf:    cfg,
+		log:     conf.NewLog(),
+	}
+}
+
+// bsky/sync for server <-> server synchronization
+// requires authentication
+func NewSyncClient() (*Client, error) {
+	client := NewAPIClient()
+	return client.authenticated()
+}
+
+func (c *Client) authenticated() (*Client, error) {
+	var err error
+	if strings.TrimSpace(c.conf.identifier()) == "" || strings.TrimSpace(c.conf.password()) == "" {
+		err := fmt.Errorf("missing identifier or password")
+		c.log.WithErrorMsg(err, "Error authenticating bsky client")
+		return nil, err
+	}
+
+	if c.session, err = atproto.ServerCreateSession(context.Background(), c.atproto, &atproto.ServerCreateSession_Input{
+		Identifier: c.conf.identifier(),
+		Password:   c.conf.password(),
+	}); err != nil {
+		c.log.WithErrorMsg(err, "Error authenticating atproto client", "host", c.conf.host(), "did", c.conf.identifier())
+		return nil, err
+	}
+
+	// set auth context
+	c.atproto.Auth = &xrpc.AuthInfo{
+		AccessJwt:  c.session.AccessJwt,
+		RefreshJwt: c.session.RefreshJwt,
+		Handle:     c.session.Handle,
+		Did:        c.session.Did,
+	}
+
+	return c, nil
 }
 
 func (c *Client) Profile() (*Profile, error) {

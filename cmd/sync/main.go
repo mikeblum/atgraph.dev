@@ -44,8 +44,9 @@ func main() {
 		exit()
 	}
 
-	if client, err = bsky.NewClient(); err != nil {
-		log.WithErrorMsg(err, "Error creating bsky client")
+	// init unauthenticated bsky client
+	if client, err = bsky.NewSyncClient(); err != nil {
+		log.WithErrorMsg(err, "Error creating bsky sync client")
 		exit()
 	}
 

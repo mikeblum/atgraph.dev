@@ -9,7 +9,11 @@ const (
 	ENV_BSKY_WORKER_COUNT    = "BSKY_WORKER_COUNT"
 
 	// defaults
-	BSKY_SOCIAL_URL      = "https://bsky.social"
+	// App View URL
+	BSKY_APP_VIEW_URL = "https://api.bsky.app"
+	// If you were making an authenticated client, you would
+	// use the PDS URL here instead - the main one is bsky.social
+	BSKY_PDS_URL         = "https://bsky.social"
 	DEFAULT_PAGE_SIZE    = 1000
 	DEFAULT_WORKER_COUNT = 5
 	DEFAULT_MAX_RETRIES  = 3

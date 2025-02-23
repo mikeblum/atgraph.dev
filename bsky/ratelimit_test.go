@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bluesky-social/indigo/util"
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ func TestRateLimit(t *testing.T) {
 }
 
 func retryOnceDeadlineTest(t *testing.T) {
-	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), xrpcClientTest())
 	assert.Nil(t, err)
 	assert.NotNil(t, handler)
 	var attempt int
@@ -62,7 +63,7 @@ func retryOnceDeadlineTest(t *testing.T) {
 }
 
 func retryOnceBackoffTest(t *testing.T) {
-	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), xrpcClientTest())
 	assert.Nil(t, err)
 	assert.NotNil(t, handler)
 	var attempt int
@@ -81,7 +82,7 @@ func retryOnceBackoffTest(t *testing.T) {
 }
 
 func maxRetriesTest(t *testing.T) {
-	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), xrpcClientTest())
 	assert.Nil(t, err)
 	assert.NotNil(t, handler)
 	conf := NewConf()
@@ -90,7 +91,7 @@ func maxRetriesTest(t *testing.T) {
 }
 
 func maxRetriesExceededTest(t *testing.T) {
-	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), xrpcClientTest())
 	assert.Nil(t, err)
 	assert.NotNil(t, handler)
 	handler.maxRetries = 2
@@ -114,7 +115,7 @@ func maxRetriesExceededTest(t *testing.T) {
 }
 
 func retryContextCancelledTest(t *testing.T) {
-	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), xrpcClientTest())
 	assert.Nil(t, err)
 	assert.NotNil(t, handler)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -138,7 +139,7 @@ func retryContextCancelledTest(t *testing.T) {
 }
 
 func resetDeadlineTest(t *testing.T) {
-	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), xrpcClientTest())
 	assert.Nil(t, err)
 	assert.NotNil(t, handler)
 	reset := time.Now().UTC()
@@ -161,7 +162,7 @@ func resetDeadlineTest(t *testing.T) {
 }
 
 func exponentialBackoffTest(t *testing.T, op OperationType) {
-	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), xrpcClientTest())
 	assert.Nil(t, err)
 	assert.NotNil(t, handler)
 	// disable max retries
@@ -181,7 +182,7 @@ func exponentialBackoffTest(t *testing.T, op OperationType) {
 }
 
 func exponentialBackoffWithRetryMaxTest(t *testing.T, op OperationType) {
-	handler, err := NewRateLimitHandler(context.TODO(), &xrpc.Client{})
+	handler, err := NewRateLimitHandler(context.TODO(), xrpcClientTest())
 	assert.Nil(t, err)
 	assert.NotNil(t, handler)
 	// disable max retries
@@ -198,4 +199,10 @@ func exponentialBackoffWithRetryMaxTest(t *testing.T, op OperationType) {
 	duration := time.Since(start)
 	assert.Contains(t, err.Error(), fmt.Sprintf("%s op: %s failed after 5 retries", op, opName))
 	assert.GreaterOrEqual(t, handler.maxWaitTime, duration)
+}
+
+func xrpcClientTest() *xrpc.Client {
+	return &xrpc.Client{
+		Client: util.TestingHTTPClient(),
+	}
 }
