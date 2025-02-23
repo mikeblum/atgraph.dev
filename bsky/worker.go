@@ -31,7 +31,7 @@ type WorkerPool struct {
 	done         chan bool
 	rateLimiter  *RateLimitHandler
 	metrics      *WorkerMetrics
-	ingest       func(context.Context, RepoItem) error
+	ingest       func(context.Context, int, RepoItem) error
 	workerCount  int
 }
 
@@ -90,7 +90,7 @@ func (p *WorkerPool) Size() int {
 	return len(p.jobs)
 }
 
-func (p *WorkerPool) WithIngest(ingest func(context.Context, RepoItem) error) *WorkerPool {
+func (p *WorkerPool) WithIngest(ingest func(context.Context, int, RepoItem) error) *WorkerPool {
 	p.ingest = ingest
 	return p
 }
@@ -169,7 +169,7 @@ func (p *WorkerPool) ingestWorker(ctx context.Context, workerID int) error {
 				"did", item.repo.RepoDid())
 
 			err := p.rateLimiter.withRetry(ctx, WriteOperation, "ingest", func() error {
-				return p.ingest(ctx, item)
+				return p.ingest(ctx, workerID, item)
 			})
 
 			status := "ok"

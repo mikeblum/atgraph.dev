@@ -94,7 +94,7 @@ func main() {
 		}
 	}()
 
-	// Await completion or cancellation
+	// Await backfill to complete or be cancelled
 	select {
 	case <-done:
 		log.Info("Bsky backfill successful ✅")
