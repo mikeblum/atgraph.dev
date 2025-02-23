@@ -18,10 +18,6 @@ type RepoJob struct {
 	repo *atproto.SyncListRepos_Repo
 }
 
-type RepoJobOut struct {
-	repo *repo.Repo
-}
-
 type RepoItem struct {
 	repo    *repo.Repo
 	Data    any                `json:"data"`
@@ -80,7 +76,6 @@ func resolveLexicon(ctx context.Context, ident *identity.Identity, r *repo.Repo,
 			if data, ok = rec.(*bsky.GraphFollow); !ok {
 				return fmt.Errorf("found wrong type in follow location in tree: %s", did)
 			}
-			lexiconErr = NewLexiconError(ITEM_GRAPH_FOLLOW)
 		case ITEM_FEED_REPOST:
 			if data, ok = rec.(*bsky.FeedRepost); !ok {
 				return fmt.Errorf("found wrong type in repost location in tree: %s", did)

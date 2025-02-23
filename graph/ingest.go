@@ -17,7 +17,7 @@ const (
 	APP_INGEST = "atproto-graph-viz:ingest"
 )
 
-func (e *Engine) Ingest(ctx context.Context, item bsky.RepoItem) error {
+func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) error {
 	var err error
 
 	var records chan *neo4j.Record
@@ -33,17 +33,19 @@ func (e *Engine) Ingest(ctx context.Context, item bsky.RepoItem) error {
 				e.log.With(
 					"action", "ingest",
 					"engine", "neo4j",
-					"type", "item",
+					"type", item.NSID,
 					"did", item.DID,
+					"worker-id", workerID,
 				).Debug("records channel closed, stopping ingest...")
 				return err
 			}
 			e.log.With(
-				"record", record.AsMap(),
-				"nsid", item.NSID.String(),
-				"did", item.DID.String(),
 				"action", "ingest",
 				"engine", "neo4j",
+				"record", record.AsMap(),
+				"type", item.NSID,
+				"did", item.DID.String(),
+				"worker-id", workerID,
 			).Info("Ingested bsky item")
 
 		case <-ctx.Done():
@@ -72,10 +74,12 @@ func (e *Engine) ingestItem(ctx context.Context, item *bsky.RepoItem) (chan *neo
 		}
 		return e.ingestProfile(ctx, item, data)
 	case bsky.ITEM_GRAPH_FOLLOW:
-		if _, ok = item.Data.(*bskyItem.GraphFollow); !ok {
+		var data *bskyItem.GraphFollow
+		if data, ok = item.Data.(*bskyItem.GraphFollow); !ok {
 			e.ingestionErr(item)
 			return records, nil
 		}
+		return e.ingestFollow(ctx, item, data)
 	case bsky.ITEM_FEED_REPOST:
 		if _, ok = item.Data.(*bskyItem.FeedRepost); !ok {
 			e.ingestionErr(item)
@@ -172,6 +176,55 @@ func (e *Engine) ingestProfile(ctx context.Context, item *bsky.RepoItem, actor *
 			neo4j.WithTxMetadata(map[string]any{"app": APP_INGEST}))
 		if err != nil {
 			e.log.WithErrorMsg(err, "Error ingesting :Profile", "id", item.DID.String(), "action", "ingest")
+			return err
+		}
+		return nil
+	})
+
+	return records, group.Wait()
+}
+
+func (e *Engine) ingestFollow(ctx context.Context, item *bsky.RepoItem, follow *bskyItem.GraphFollow) (chan *neo4j.Record, error) {
+	records := make(chan *neo4j.Record, 1)
+	session := e.driver.NewSession(ctx, e.session)
+	defer session.Close(ctx)
+	group, ctx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		_, err := session.ExecuteWrite(ctx,
+			func(tx neo4j.ManagedTransaction) (any, error) {
+				defer close(records)
+				createdTiemstamp, err := datetimeMust(item.DID, &follow.CreatedAt)
+				if err != nil {
+					return nil, err
+				}
+				result, err := tx.Run(ctx, `
+					MATCH (a:Profile {id: $id_a})
+					MERGE (b:Profile {id: $id_b})
+					MERGE (a)-[r:FOLLOWS {created: $created, rev: $rev, version: $version}]->(b)
+					RETURN a.id AS a_did, b.id AS b_did;
+					`, map[string]any{
+					"id_a": item.DID.String(),
+					"id_b": follow.Subject,
+					"rev":  item.Rev,
+					"sig":  item.Sig,
+					"type": follow.LexiconTypeID,
+					// neo4j (java) expects epoch time in milliseconds
+					"created": createdTiemstamp.Unix() * int64(time.Second/time.Millisecond),
+					"version": item.Version,
+				})
+				if err != nil {
+					return nil, err
+				}
+				for result.Next(ctx) {
+					record := result.Record()
+					records <- record
+				}
+				return records, nil
+			},
+			neo4j.WithTxTimeout(e.conf.timeout()),
+			neo4j.WithTxMetadata(map[string]any{"app": APP_INGEST}))
+		if err != nil {
+			e.log.WithErrorMsg(err, "Error ingesting [:FOLLOWS]", "id", item.DID.String(), "action", "ingest")
 			return err
 		}
 		return nil
