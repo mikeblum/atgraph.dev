@@ -3,6 +3,7 @@ package bsky
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -109,7 +110,7 @@ func maxRetriesExceededTest(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, 2, attempt)
-	assert.Contains(t, err.Error(), "operation failed after 2 retries")
+	assert.Contains(t, err.Error(), fmt.Sprintf("%s op: %s failed after 2 retries", ReadOperation, opName))
 }
 
 func retryContextCancelledTest(t *testing.T) {
@@ -156,7 +157,7 @@ func resetDeadlineTest(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, 3, attempt)
-	assert.Contains(t, err.Error(), "operation failed after 3 retries")
+	assert.Contains(t, err.Error(), fmt.Sprintf("%s op: %s failed after 3 retries", ReadOperation, opName))
 }
 
 func exponentialBackoffTest(t *testing.T, op OperationType) {
@@ -175,7 +176,7 @@ func exponentialBackoffTest(t *testing.T, op OperationType) {
 		}
 	})
 	duration := time.Since(start)
-	assert.Contains(t, err.Error(), "operation failed after 5s")
+	assert.Contains(t, err.Error(), fmt.Sprintf("%s op: %s failed after 5s", op, opName))
 	assert.LessOrEqual(t, handler.maxWaitTime, duration)
 }
 
@@ -195,6 +196,6 @@ func exponentialBackoffWithRetryMaxTest(t *testing.T, op OperationType) {
 		}
 	})
 	duration := time.Since(start)
-	assert.Contains(t, err.Error(), "operation failed after 5 retries")
+	assert.Contains(t, err.Error(), fmt.Sprintf("%s op: %s failed after 5 retries", op, opName))
 	assert.GreaterOrEqual(t, handler.maxWaitTime, duration)
 }
