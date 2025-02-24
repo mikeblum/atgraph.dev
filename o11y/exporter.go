@@ -53,7 +53,7 @@ func NewO11y(ctx context.Context, log *conf.Log) (*otlpmetricgrpc.Exporter, erro
 						"error", err,
 						"engine", "otel",
 						"method", method,
-						"duration", time.Since(start),
+						"duration", time.Until(start),
 					)
 				}
 				return err

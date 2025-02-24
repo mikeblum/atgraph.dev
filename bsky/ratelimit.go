@@ -99,12 +99,13 @@ func (h *RateLimitHandler) WithRetry(ctx context.Context, opType OperationType, 
 		if suppressATProtoErr(err) {
 			return nil
 		}
+
 		switch apiErr.StatusCode {
 		case http.StatusTooManyRequests:
 			// Record TooManyRequests metric
-			h.metrics.rateLimit.Add(ctx, 1, metric.WithAttributes(baseAttrs...))
+			h.metrics.rateLimitHits.Add(ctx, 1, metric.WithAttributes(baseAttrs...))
 			waitTime = h.calculateWaitTime(apiErr, attempt, opType)
-			h.metrics.waitDuration.Record(ctx, waitTime.Seconds(), metric.WithAttributes(baseAttrs...))
+			h.metrics.rateLimitRequestsReset.Record(ctx, waitTime.Seconds(), metric.WithAttributes(baseAttrs...))
 			h.metrics.retryAttempts.Add(ctx, 1, metric.WithAttributes(baseAttrs...))
 			h.log.With("action", "retry", "op-name", opName, "op-type", opType, "wait", waitTime, "attempt", attempt+1, "max-retry", h.maxRetries, "max-wait", h.maxWaitTime).Warn(fmt.Sprintf("Rate limit exceeded. Waiting %v", waitTime))
 			select {
@@ -145,7 +146,7 @@ func (h *RateLimitHandler) WithRetry(ctx context.Context, opType OperationType, 
 func (h *RateLimitHandler) calculateWaitTime(apiErr *xrpc.Error, attempt int, opType OperationType) time.Duration {
 	// use specified rate limit TTL if specififed
 	if apiErr != nil && apiErr.Ratelimit != nil {
-		return time.Since(apiErr.Ratelimit.Reset).Abs()
+		return time.Until(apiErr.Ratelimit.Reset)
 	}
 
 	// otherwise fall back to exponential backoff based on read vs write op

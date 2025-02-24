@@ -7,7 +7,6 @@ import (
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
-	"github.com/bluesky-social/indigo/util"
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/mikeblum/atproto-graph-viz/conf"
 )
@@ -17,7 +16,6 @@ type Client struct {
 	conf    *Conf
 	session *atproto.ServerCreateSession_Output
 	log     *conf.Log
-	cursor  *string
 }
 
 // bsky/api for public api client usage
@@ -26,7 +24,7 @@ func NewAPIClient() *Client {
 	cfg := NewConf()
 
 	client := &xrpc.Client{
-		Client: util.RobustHTTPClient(),
+		Client: NewHTTPClient(),
 		Host:   cfg.host(),
 	}
 

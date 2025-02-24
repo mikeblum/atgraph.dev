@@ -17,11 +17,13 @@ const (
 )
 
 type RateLimitMetrics struct {
-	retryAttempts metric.Int64UpDownCounter
-	rateLimit     metric.Int64Counter
-	waitDuration  metric.Float64Histogram
-	failures      metric.Int64Counter
-	statusCodes   metric.Int64Counter
+	retryAttempts              metric.Int64UpDownCounter
+	rateLimitHits              metric.Int64Counter
+	rateLimitRequestsRemaining metric.Int64Gauge
+	rateLimitRequestsLimit     metric.Int64Gauge
+	rateLimitRequestsReset     metric.Float64Histogram
+	failures                   metric.Int64Counter
+	statusCodes                metric.Int64Counter
 }
 
 func NewRateLimitMetrics(ctx context.Context) (*RateLimitMetrics, error) {
@@ -39,8 +41,8 @@ func NewRateLimitMetrics(ctx context.Context) (*RateLimitMetrics, error) {
 		return nil, err
 	}
 
-	waitDuration, err := meter.Float64Histogram(
-		"atproto.rate_limit.wait_duration",
+	rateLimitRequestsReset, err := meter.Float64Histogram(
+		"atproto.rate_limit.wait_remaining",
 		metric.WithDescription("Time spent waiting in seconds due to rate limits"),
 		metric.WithUnit("s"),
 	)
@@ -48,10 +50,28 @@ func NewRateLimitMetrics(ctx context.Context) (*RateLimitMetrics, error) {
 		return nil, err
 	}
 
-	rateLimit, err := meter.Int64Counter(
+	rateLimitHits, err := meter.Int64Counter(
 		"atproto.rate_limit.hits",
 		metric.WithDescription("Number of rate limits encountered"),
 		metric.WithUnit("{hit}"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	rateLimitRequestsRemaining, err := meter.Int64Gauge(
+		"atproto.rate_limit.requests_remaining",
+		metric.WithDescription("Number of requests remaining per 5 minutes, rate limited by IP"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	rateLimitRequestsLimit, err := meter.Int64Gauge(
+		"atproto.rate_limit.requests_limit",
+		metric.WithDescription("Number of requests allowed / 3,000 requests per 5 minutes, rate limited by IP"),
+		metric.WithUnit("{request}"),
 	)
 	if err != nil {
 		return nil, err
@@ -76,10 +96,12 @@ func NewRateLimitMetrics(ctx context.Context) (*RateLimitMetrics, error) {
 	}
 
 	return &RateLimitMetrics{
-		retryAttempts: retryAttempts,
-		rateLimit:     rateLimit,
-		waitDuration:  waitDuration,
-		failures:      failures,
-		statusCodes:   statusCodes,
+		retryAttempts:              retryAttempts,
+		rateLimitHits:              rateLimitHits,
+		rateLimitRequestsRemaining: rateLimitRequestsRemaining,
+		rateLimitRequestsLimit:     rateLimitRequestsLimit,
+		rateLimitRequestsReset:     rateLimitRequestsReset,
+		failures:                   failures,
+		statusCodes:                statusCodes,
 	}, nil
 }
