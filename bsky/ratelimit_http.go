@@ -68,7 +68,6 @@ func (r *RateLimitInterceptor) RoundTrip(req *http.Request) (*http.Response, err
 	ctx := resp.Request.Context()
 	r.metrics.rateLimitRequestsRemaining.Record(ctx, int64(info.Remaining), metric.WithAttributes(baseAttrs...))
 	r.metrics.rateLimitRequestsLimit.Record(ctx, int64(info.Limit), metric.WithAttributes(baseAttrs...))
-	r.metrics.rateLimitRequestsReset.Record(ctx, time.Until(info.Reset).Seconds(), metric.WithAttributes(baseAttrs...))
 
 	return resp, nil
 }

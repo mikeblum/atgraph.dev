@@ -81,7 +81,7 @@ func (h *RateLimitHandler) WithRetry(ctx context.Context, opType OperationType, 
 	var waitTime time.Duration
 	var attempt int
 	for {
-		if (h.maxRetries > 0 && attempt >= h.maxRetries) || waitTime >= h.maxWaitTime {
+		if (h.maxRetries > 0 && attempt >= h.maxRetries) || (h.maxWaitTime > 0 && waitTime >= h.maxWaitTime) {
 			break
 		}
 
@@ -105,7 +105,7 @@ func (h *RateLimitHandler) WithRetry(ctx context.Context, opType OperationType, 
 			// Record TooManyRequests metric
 			h.metrics.rateLimitHits.Add(ctx, 1, metric.WithAttributes(baseAttrs...))
 			waitTime = h.calculateWaitTime(apiErr, attempt, opType)
-			h.metrics.rateLimitRequestsReset.Record(ctx, waitTime.Seconds(), metric.WithAttributes(baseAttrs...))
+			h.metrics.rateLimitRequestsReset.Record(ctx, int64(waitTime.Seconds()), metric.WithAttributes(baseAttrs...))
 			h.metrics.retryAttempts.Add(ctx, 1, metric.WithAttributes(baseAttrs...))
 			h.log.With("action", "retry", "op-name", opName, "op-type", opType, "wait", waitTime, "attempt", attempt+1, "max-retry", h.maxRetries, "max-wait", h.maxWaitTime).Warn(fmt.Sprintf("Rate limit exceeded. Waiting %v", waitTime))
 			select {
@@ -113,7 +113,10 @@ func (h *RateLimitHandler) WithRetry(ctx context.Context, opType OperationType, 
 				return fmt.Errorf("context cancelled while waiting for rate limit: %w", ctx.Err())
 			// wait alloted cooldown period
 			case <-time.After(waitTime):
+				// reset waiting period
+				h.metrics.rateLimitRequestsReset.Record(ctx, 0, metric.WithAttributes(baseAttrs...))
 				attempt++
+				h.metrics.retryAttempts.Add(ctx, 1, metric.WithAttributes(baseAttrs...))
 				continue
 			}
 		}
