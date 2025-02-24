@@ -71,8 +71,8 @@ func NewRateLimitHandler(ctx context.Context, client *xrpc.Client) (*RateLimitHa
 	}, nil
 }
 
-// executeWithRetry executes an API call with rate limit handling
-func (h *RateLimitHandler) withRetry(ctx context.Context, opType OperationType, opName string, operation func() error) error {
+// WithRetry executes an API call with rate limit handling
+func (h *RateLimitHandler) WithRetry(ctx context.Context, opType OperationType, opName string, operation func() error) error {
 	baseAttrs := []attribute.KeyValue{
 		attribute.String("name", opName),
 		attribute.String("type", opType.String()),

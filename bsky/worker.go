@@ -169,7 +169,7 @@ func (p *WorkerPool) ingestWorker(ctx context.Context, workerID int) error {
 				"worker-id", workerID,
 				"did", item.repo.RepoDid())
 
-			err := p.rateLimiter.withRetry(ctx, WriteOperation, "ingest", func() error {
+			err := p.rateLimiter.WithRetry(ctx, WriteOperation, "ingest", func() error {
 				return p.ingest(ctx, workerID, item)
 			})
 
@@ -215,7 +215,7 @@ func (p *WorkerPool) repoWorker(ctx context.Context, workerID int) error {
 				"worker-id", workerID,
 				"did", job.repo.Did)
 
-			err := p.rateLimiter.withRetry(ctx, ReadOperation, "getRepo", func() error {
+			err := p.rateLimiter.WithRetry(ctx, ReadOperation, "getRepo", func() error {
 				if err := p.getRepo(ctx, job); err != nil {
 					if !suppressATProtoErr(err) {
 						p.log.WithErrorMsg(err, "Error getting repo",
