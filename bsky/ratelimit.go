@@ -19,6 +19,7 @@ const (
 
 	ErrRepoTakedown    = "RepoTakendown"
 	ErrRepoDeactivated = "RepoDeactivated"
+	ErrRepoNotFound    = "XRPC ERROR 400: NotFound: Repo not found"
 )
 
 type OperationType int
@@ -103,7 +104,7 @@ func (h *RateLimitHandler) withRetry(ctx context.Context, opType OperationType, 
 			// Record TooManyRequests metric
 			h.metrics.rateLimit.Add(ctx, 1, metric.WithAttributes(baseAttrs...))
 			waitTime = h.calculateWaitTime(apiErr, attempt, opType)
-			h.metrics.currentBackoff.Add(ctx, waitTime.Seconds(), metric.WithAttributes(baseAttrs...))
+			h.metrics.waitDuration.Record(ctx, waitTime.Seconds(), metric.WithAttributes(baseAttrs...))
 			h.metrics.retryAttempts.Add(ctx, 1, metric.WithAttributes(baseAttrs...))
 			h.log.With("action", "retry", "op-name", opName, "op-type", opType, "wait", waitTime, "attempt", attempt+1, "max-retry", h.maxRetries, "max-wait", h.maxWaitTime).Warn(fmt.Sprintf("Rate limit exceeded. Waiting %v", waitTime))
 			select {
@@ -173,6 +174,8 @@ func suppressATProtoErr(err error) bool {
 	case ErrRepoTakedown:
 		return true
 	case ErrRepoDeactivated:
+		return true
+	case ErrRepoNotFound:
 		return true
 	}
 

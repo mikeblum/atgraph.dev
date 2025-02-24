@@ -2,12 +2,9 @@ package bsky
 
 import (
 	"context"
-	"fmt"
-	"sync/atomic"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/semaphore"
 )
 
 func (c *Client) BackfillRepos(ctx context.Context, pool *WorkerPool) error {
@@ -27,7 +24,6 @@ func (c *Client) BackfillRepos(ctx context.Context, pool *WorkerPool) error {
 				}
 				if err != nil {
 					c.log.WithError(err).Error("Error processing results - exiting...")
-					continue
 				}
 				pool.metrics.jobsInflight.Add(ctx, -1)
 				pool.jobsInflight.Add(-1)
@@ -35,53 +31,38 @@ func (c *Client) BackfillRepos(ctx context.Context, pool *WorkerPool) error {
 		}
 	})
 
-	// Limit comcurrent page fetches to worker count
-	sem := semaphore.NewWeighted(int64(c.conf.WorkerCount()))
-	cursor := atomic.Value{}
-	cursor.Store((*string)(nil))
-	done := atomic.Bool{}
+	var cursor *string
+	page := 1
 
-	for page := 1; !done.Load(); page++ {
-		if err := sem.Acquire(ctx, 1); err != nil {
+	for {
+		next, err := c.listRepos(ctx, cursor, page, pool, g)
+		if err != nil {
+			c.log.WithError(err).Error("Error listing repo", "cursor", cursor, "page", page)
 			return err
 		}
 
-		currentPage := page
-		currentCursor := cursor.Load().(*string)
+		if next == nil || *next == "" {
+			break
+		}
 
-		// submit pages throttled by worker pool size
-		g.Go(func() error {
-			defer sem.Release(1)
-
-			var nextCursor *string
-			var err error
-			if nextCursor, err = c.listRepos(ctx, currentCursor, currentPage, pool); err != nil {
-				return err
-			}
-
-			cursor.Store(nextCursor)
-			// short-circuit if no more pages to process
-			if nextCursor == nil || *nextCursor == "" {
-				done.Store(true)
-				c.log.With("total-pages", page).Info("Submitted repos for ingestion")
-			}
-			return nil
-		})
-
+		cursor = next
+		page++
 	}
 
 	return g.Wait()
 }
 
-func (c *Client) listRepos(ctx context.Context, next *string, page int, pool *WorkerPool) (*string, error) {
+func (c *Client) listRepos(ctx context.Context, next *string, page int, pool *WorkerPool, g *errgroup.Group) (*string, error) {
 	var repos *atproto.SyncListRepos_Output
 	var err error
 
 	pageSize := int64(c.conf.PageSize())
+
 	var cursor string
 	if next != nil {
 		cursor = *next
 	}
+
 	if repos, err = atproto.SyncListRepos(ctx, c.atproto, cursor, pageSize); err != nil {
 		if !suppressATProtoErr(err) {
 			c.log.WithErrorMsg(err, "Error fetching bsky repo", "next", next)
@@ -91,20 +72,10 @@ func (c *Client) listRepos(ctx context.Context, next *string, page int, pool *Wo
 
 	c.log.With("action", "list-repos", "next", next, "page", page, "page-size", pageSize, "repos", len(repos.Repos)).Info("Fetching Bluesky repos")
 
-	// limit conncurrent processing of repos to worker pool
-	g, ctx := errgroup.WithContext(ctx)
-	sem := semaphore.NewWeighted(int64(c.conf.WorkerCount()))
-
-	for _, repo := range repos.Repos {
-		if err := sem.Acquire(ctx, 1); err != nil {
-			return nil, err
-		}
-
-		g.Go(func() error {
-			defer sem.Release(1)
-
+	g.Go(func() error {
+		for _, repo := range repos.Repos {
 			if filterRepo(repo) {
-				return nil
+				continue
 			}
 
 			// Increment count before submitting
@@ -119,16 +90,11 @@ func (c *Client) listRepos(ctx context.Context, next *string, page int, pool *Wo
 				pool.metrics.jobsInflight.Add(ctx, -1)
 				c.log.WithErrorMsg(err, "Error submitting bsky repo for ingestion", "did", repo.Did)
 			}
-			return nil
-		})
-	}
+		}
+		return nil
+	})
 
-	prev := c.cursor
-	if prev == repos.Cursor {
-		return nil, fmt.Errorf("!!listRepos: cursor not advancing: %s", *prev)
-	}
-	c.cursor = repos.Cursor
-	return c.cursor, nil
+	return repos.Cursor, nil
 }
 
 func filterRepo(repo *atproto.SyncListRepos_Repo) bool {

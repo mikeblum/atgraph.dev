@@ -17,12 +17,11 @@ const (
 )
 
 type RateLimitMetrics struct {
-	retryAttempts  metric.Int64UpDownCounter
-	waitDuration   metric.Float64Histogram
-	rateLimit      metric.Int64Counter
-	currentBackoff metric.Float64UpDownCounter
-	failures       metric.Int64Counter
-	statusCodes    metric.Int64Counter
+	retryAttempts metric.Int64UpDownCounter
+	rateLimit     metric.Int64Counter
+	waitDuration  metric.Float64Histogram
+	failures      metric.Int64Counter
+	statusCodes   metric.Int64Counter
 }
 
 func NewRateLimitMetrics(ctx context.Context) (*RateLimitMetrics, error) {
@@ -42,7 +41,7 @@ func NewRateLimitMetrics(ctx context.Context) (*RateLimitMetrics, error) {
 
 	waitDuration, err := meter.Float64Histogram(
 		"atproto.rate_limit.wait_duration",
-		metric.WithDescription("Time spent waiting due to rate limits"),
+		metric.WithDescription("Time spent waiting in seconds due to rate limits"),
 		metric.WithUnit("s"),
 	)
 	if err != nil {
@@ -51,17 +50,8 @@ func NewRateLimitMetrics(ctx context.Context) (*RateLimitMetrics, error) {
 
 	rateLimit, err := meter.Int64Counter(
 		"atproto.rate_limit.hits",
-		metric.WithDescription("Number of rate limit hits encountered"),
+		metric.WithDescription("Number of rate limits encountered"),
 		metric.WithUnit("{hit}"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	currentBackoff, err := meter.Float64UpDownCounter(
-		"atproto.rate_limit.current_backoff",
-		metric.WithDescription("Current backoff duration for rate limiting"),
-		metric.WithUnit("s"),
 	)
 	if err != nil {
 		return nil, err
@@ -86,11 +76,10 @@ func NewRateLimitMetrics(ctx context.Context) (*RateLimitMetrics, error) {
 	}
 
 	return &RateLimitMetrics{
-		retryAttempts:  retryAttempts,
-		waitDuration:   waitDuration,
-		rateLimit:      rateLimit,
-		currentBackoff: currentBackoff,
-		failures:       failures,
-		statusCodes:    statusCodes,
+		retryAttempts: retryAttempts,
+		rateLimit:     rateLimit,
+		waitDuration:  waitDuration,
+		failures:      failures,
+		statusCodes:   statusCodes,
 	}, nil
 }
