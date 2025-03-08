@@ -15,7 +15,7 @@ func NewConf() *Conf {
 }
 
 func (c *Conf) host() string {
-	return c.GetEnv(ENV_BSKY_PDS_URL, BSKY_ENTRYWAY_URL)
+	return c.GetEnv(BSKY_APP_VIEW_URL, BSKY_ENTRYWAY_URL)
 }
 
 func (c *Conf) identifier() string {

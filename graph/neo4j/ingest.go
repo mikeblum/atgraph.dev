@@ -1,4 +1,4 @@
-package graph
+package neo4j
 
 import (
 	"context"

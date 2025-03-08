@@ -6,7 +6,7 @@ import (
 
 	"github.com/mikeblum/atproto-graph-viz/bsky"
 	"github.com/mikeblum/atproto-graph-viz/conf"
-	"github.com/mikeblum/atproto-graph-viz/graph"
+	graph "github.com/mikeblum/atproto-graph-viz/graph/neo4j"
 	"github.com/mikeblum/atproto-graph-viz/o11y"
 )
 
