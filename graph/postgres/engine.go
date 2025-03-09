@@ -4,8 +4,12 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/mikeblum/atproto-graph-viz/bsky"
 	"github.com/mikeblum/atproto-graph-viz/conf"
+	"github.com/mikeblum/atproto-graph-viz/graph"
+)
+
+const (
+	connString = "dbname=atproto_graph_viz sslmode=none"
 )
 
 type Engine struct {
@@ -14,15 +18,33 @@ type Engine struct {
 	log     *conf.Log
 }
 
-func (e *Engine) Bootstrap(ctx context.Context) error {
-	conn, err := pgx.Connect(ctx, "dbname=atproto_graph_viz sslmode=none")
-	if err != nil {
-		return err
+func NewEngine(ctx context.Context) (graph.Engine, error) {
+	var conn *pgx.Conn
+	var err error
+	if conn, err = pgx.Connect(ctx, connString); err != nil {
+		return nil, err
 	}
-	defer conn.Close(ctx)
+	cfg := NewConf()
+	return &Engine{
+		conf:    cfg,
+		session: conn,
+		log:     conf.NewLog(),
+	}, nil
+}
+
+func (e *Engine) CreateIndexes(ctx context.Context) error {
+	// no-op as sqlc generates the schema
 	return nil
 }
 
-func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) error {
+func (e *Engine) CreateConstraints(ctx context.Context) error {
+	// no-op as sqlc generates the schema
 	return nil
 }
+
+func (e *Engine) Close(ctx context.Context) error {
+	return e.session.Close(ctx)
+}
+
+// validate graph.Engine interface is implemented
+var _ graph.Engine = &Engine{}

@@ -4,7 +4,7 @@ SELECT * FROM cypher('atproto_graph_viz', $$
     RETURN u
 $$) as (n agtype);
 
--- name: InsertProfile :exec
+-- name: InsertProfile :one
 SELECT * 
 FROM cypher('atproto_graph_viz', $$
     MERGE (p:Profile {id: $1})
@@ -23,4 +23,4 @@ FROM cypher('atproto_graph_viz', $$
                 -- tracking firehose lag time
                 p.updated 	= timestamp()
         RETURN p.id AS did, p.ingested AS ingested_ts
-$$) as (v agtype);
+$$, $1) as (v agtype);

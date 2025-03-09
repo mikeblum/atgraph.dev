@@ -26,7 +26,7 @@ func (q *Queries) ExplainProfile(ctx context.Context) (ExplainProfileRow, error)
 	return i, err
 }
 
-const insertProfile = `-- name: InsertProfile :exec
+const insertProfile = `-- name: InsertProfile :one
 SELECT  
 FROM cypher('atproto_graph_viz', $$
     MERGE (p:Profile {id: $1})
@@ -45,10 +45,15 @@ FROM cypher('atproto_graph_viz', $$
                 -- tracking firehose lag time
                 p.updated 	= timestamp()
         RETURN p.id AS did, p.ingested AS ingested_ts
-$$) as (v agtype)
+$$, $1) as (v agtype)
 `
 
-func (q *Queries) InsertProfile(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, insertProfile)
-	return err
+type InsertProfileRow struct {
+}
+
+func (q *Queries) InsertProfile(ctx context.Context, cypher interface{}) (InsertProfileRow, error) {
+	row := q.db.QueryRow(ctx, insertProfile, cypher)
+	var i InsertProfileRow
+	err := row.Scan()
+	return i, err
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/mikeblum/atproto-graph-viz/conf"
+	"github.com/mikeblum/atproto-graph-viz/graph"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
@@ -14,7 +15,7 @@ type Engine struct {
 	log     *conf.Log
 }
 
-func Bootstrap(ctx context.Context) (*Engine, error) {
+func NewEngine(ctx context.Context) (graph.Engine, error) {
 	var driver neo4j.DriverWithContext
 	var err error
 
@@ -42,3 +43,6 @@ func Bootstrap(ctx context.Context) (*Engine, error) {
 func (e *Engine) Close(ctx context.Context) error {
 	return e.driver.Close(ctx)
 }
+
+// validate graph.Engine interface is implemented
+var _ graph.Engine = &Engine{}
