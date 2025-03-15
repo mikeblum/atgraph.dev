@@ -9,6 +9,7 @@ import (
 	bskyItem "github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/mikeblum/atproto-graph-viz/bsky"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -53,9 +54,9 @@ func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) e
 	}
 }
 
-func (e *Engine) ingestItem(ctx context.Context, item *bsky.RepoItem) (chan *, error) {
+func (e *Engine) ingestItem(ctx context.Context, item *bsky.RepoItem) (chan *interface{}, error) {
 	e.log.With("nsid", item.NSID.String(), "did", item.DID.String(), "action", "ingest", "engine", "neo4j").Info("Ingesting bsky item")
-	records := make(chan *neo4j.Record, 1)
+	records := make(chan *interface{}, 1)
 	defer close(records)
 	var err error
 	var ok bool
@@ -122,7 +123,7 @@ func (e *Engine) ingestionErr(item *bsky.RepoItem) error {
 	return err
 }
 
-func (e *Engine) ingestProfile(ctx context.Context, item *bsky.RepoItem, actor *bskyItem.ActorProfile) (chan *neo4j.Record, error) {
+func (e *Engine) ingestProfile(ctx context.Context, item *bsky.RepoItem, actor *bskyItem.ActorProfile) (chan *interface{}, error) {
 	records := make(chan *neo4j.Record, 1)
 	queries := New(e.session)
 	group, ctx := errgroup.WithContext(ctx)
