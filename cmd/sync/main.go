@@ -7,7 +7,7 @@ import (
 	"github.com/mikeblum/atproto-graph-viz/bsky"
 	"github.com/mikeblum/atproto-graph-viz/conf"
 	"github.com/mikeblum/atproto-graph-viz/graph"
-	"github.com/mikeblum/atproto-graph-viz/graph/postgres"
+	"github.com/mikeblum/atproto-graph-viz/graph/clickhouse"
 	"github.com/mikeblum/atproto-graph-viz/o11y"
 )
 
@@ -26,8 +26,8 @@ func main() {
 	defer o11y.Cleanup(ctx)
 
 	var engine graph.Engine
-	if engine, err = postgres.NewEngine(ctx); err != nil {
-		log.WithErrorMsg(err, "Error bootstrapping neo4j driver")
+	if engine, err = clickhouse.NewEngine(ctx); err != nil {
+		log.WithErrorMsg(err, "Error bootstrapping clickhouse driver")
 		exit()
 	}
 

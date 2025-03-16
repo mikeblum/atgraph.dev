@@ -1,7 +1,8 @@
-package postgres
+package clickhouse
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -9,7 +10,7 @@ import (
 	bskyItem "github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/mikeblum/atproto-graph-viz/bsky"
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/mikeblum/atproto-graph-viz/graph/clickhouse/internal/db"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -20,7 +21,7 @@ const (
 func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) error {
 	var err error
 
-	var records chan *neo4j.Record
+	var records chan *db.AtgraphProfile
 	if records, err = e.ingestItem(ctx, &item); records == nil || err != nil {
 		err = errors.Join(err, e.ingestionErr(&item))
 		return err
@@ -32,7 +33,7 @@ func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) e
 			if !ok {
 				e.log.With(
 					"action", "ingest",
-					"engine", "postgres",
+					"engine", "clickhouse",
 					"type", item.NSID,
 					"did", item.DID,
 					"worker-id", workerID,
@@ -41,8 +42,8 @@ func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) e
 			}
 			e.log.With(
 				"action", "ingest",
-				"engine", "postgres",
-				"record", record.AsMap(),
+				"engine", "clickhouse",
+				"record", record,
 				"type", item.NSID,
 				"did", item.DID.String(),
 				"worker-id", workerID,
@@ -54,9 +55,9 @@ func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) e
 	}
 }
 
-func (e *Engine) ingestItem(ctx context.Context, item *bsky.RepoItem) (chan *interface{}, error) {
-	e.log.With("nsid", item.NSID.String(), "did", item.DID.String(), "action", "ingest", "engine", "neo4j").Info("Ingesting bsky item")
-	records := make(chan *interface{}, 1)
+func (e *Engine) ingestItem(ctx context.Context, item *bsky.RepoItem) (chan *db.AtgraphProfile, error) {
+	e.log.With("nsid", item.NSID.String(), "did", item.DID.String(), "action", "ingest", "engine", "clickhouse").Info("Ingesting bsky item")
+	records := make(chan *db.AtgraphProfile, 1)
 	defer close(records)
 	var err error
 	var ok bool
@@ -74,12 +75,10 @@ func (e *Engine) ingestItem(ctx context.Context, item *bsky.RepoItem) (chan *int
 		}
 		return e.ingestProfile(ctx, item, data)
 	case bsky.ITEM_GRAPH_FOLLOW:
-		var data *bskyItem.GraphFollow
-		if data, ok = item.Data.(*bskyItem.GraphFollow); !ok {
+		if _, ok = item.Data.(*bskyItem.GraphFollow); !ok {
 			e.ingestionErr(item)
 			return records, nil
 		}
-		return e.ingestFollow(ctx, item, data)
 	case bsky.ITEM_FEED_REPOST:
 		if _, ok = item.Data.(*bskyItem.FeedRepost); !ok {
 			e.ingestionErr(item)
@@ -123,63 +122,28 @@ func (e *Engine) ingestionErr(item *bsky.RepoItem) error {
 	return err
 }
 
-func (e *Engine) ingestProfile(ctx context.Context, item *bsky.RepoItem, actor *bskyItem.ActorProfile) (chan *interface{}, error) {
-	records := make(chan *neo4j.Record, 1)
-	queries := New(e.session)
+func (e *Engine) ingestProfile(ctx context.Context, item *bsky.RepoItem, actor *bskyItem.ActorProfile) (chan *db.AtgraphProfile, error) {
+	records := make(chan *db.AtgraphProfile, 1)
 	group, ctx := errgroup.WithContext(ctx)
+	session := db.New(e.db)
+	createdTs, err := datetimeMust(item.DID, actor.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
 	group.Go(func() error {
-		queries.InsertProfile(ctx)
-		if err != nil {
-			e.log.WithErrorMsg(err, "Error ingesting :Profile", "id", item.DID.String(), "action", "ingest")
-			return err
-		}
-		return nil
-	})
+		defer close(records)
+		session.InsertProfile(ctx, db.InsertProfileParams{
+			Did:     item.DID.String(),
+			Type:    actor.LexiconTypeID,
+			Handle:  sql.NullString{String: item.Ident.Handle.String(), Valid: true},
+			Created: createdTs,
+			Rev:     sql.NullString{String: item.Rev, Valid: true},
+			Sig:     sql.NullString{String: item.Sig, Valid: true},
+			Version: item.Version,
+		})
 
-	return records, group.Wait()
-}
-
-func (e *Engine) ingestFollow(ctx context.Context, item *bsky.RepoItem, follow *bskyItem.GraphFollow) (chan *neo4j.Record, error) {
-	records := make(chan *neo4j.Record, 1)
-	session := e.driver.NewSession(ctx, e.session)
-	defer session.Close(ctx)
-	group, ctx := errgroup.WithContext(ctx)
-	group.Go(func() error {
-		_, err := session.ExecuteWrite(ctx,
-			func(tx neo4j.ManagedTransaction) (any, error) {
-				defer close(records)
-				createdTiemstamp, err := datetimeMust(item.DID, &follow.CreatedAt)
-				if err != nil {
-					return nil, err
-				}
-				result, err := tx.Run(ctx, `
-					MATCH (a:Profile {id: $id_a})
-					MERGE (b:Profile {id: $id_b})
-					MERGE (a)-[r:FOLLOWS {created: $created, rev: $rev, version: $version}]->(b)
-					RETURN a.id AS a_did, b.id AS b_did;
-					`, map[string]any{
-					"id_a": item.DID.String(),
-					"id_b": follow.Subject,
-					"rev":  item.Rev,
-					"sig":  item.Sig,
-					"type": follow.LexiconTypeID,
-					// neo4j (java) expects epoch time in milliseconds
-					"created": createdTiemstamp.Unix() * int64(time.Second/time.Millisecond),
-					"version": item.Version,
-				})
-				if err != nil {
-					return nil, err
-				}
-				for result.Next(ctx) {
-					record := result.Record()
-					records <- record
-				}
-				return records, nil
-			},
-			neo4j.WithTxTimeout(e.conf.timeout()),
-			neo4j.WithTxMetadata(map[string]any{"app": APP_INGEST}))
 		if err != nil {
-			e.log.WithErrorMsg(err, "Error ingesting [:FOLLOWS]", "id", item.DID.String(), "action", "ingest")
+			e.log.WithErrorMsg(err, "Error ingesting app.bsky.actor.profile", "id", item.DID.String(), "action", "ingest", "type", "app.bsky.actor.profile")
 			return err
 		}
 		return nil

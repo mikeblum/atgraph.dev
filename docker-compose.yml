@@ -65,9 +65,9 @@ services:
     image: neo4j:5.26.2-enterprise-bullseye
     container_name: neo4j
     ports:
-      - "2004:2004"
-      - "7474:7474"
-      - "7687:7687"
+      - "2004:2004" # Prometheus /metrics
+      - "7474:7474" # HTTP UI
+      - "7687:7687" # Bolt binary proto
     environment:
       NEO4J_ACCEPT_LICENSE_AGREEMENT: yes  
       NEO4J_dbms_usage__report_enabled: false
@@ -94,10 +94,43 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.2-alpine
+    container_name: clickhouse
+    ports:
+      - "8123:8123"   # HTTP interface
+      - "9000:9000"   # Native interface (TCP)
+      - "9009:9009"   # Inter-server communication port
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/custom-config.xml
+      - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/custom-users.xml
+    environment:
+      CLICKHOUSE_DB: atgraph
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - atproto-graph-viz-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
 volumes:
   neo4j-data:
   neo4j-logs:
   prometheus-data:
+  clickhouse-data:
+  clickhouse-logs:
 
 networks:
   atproto-graph-viz-net:

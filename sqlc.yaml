@@ -1,10 +1,11 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    queries: "sql/query.sql"
-    schema: "sql/schema.sql"
+    schema: "sql/schema-sqlc.sql"
+    queries: "sql/queries/*.sql"
     gen:
       go:
-        package: "postgres"
-        out: "graph/postgres"
-        sql_package: "pgx/v5"
+        package: "db"
+        out: "graph/clickhouse/internal/db"
+        # clickhouse driver supports database/sql
+        sql_package: "database/sql"
