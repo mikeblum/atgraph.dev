@@ -10,7 +10,7 @@ import (
 
 type AtgraphProfile struct {
 	Did      string
-	Type     string
+	Lexicon  string
 	Handle   sql.NullString
 	Created  interface{}
 	Ingested interface{}

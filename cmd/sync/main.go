@@ -26,7 +26,7 @@ func main() {
 	defer o11y.Cleanup(ctx)
 
 	var engine graph.Engine
-	if engine, err = clickhouse.NewEngine(ctx); err != nil {
+	if engine, err = clickhouse.NewIngestEngine(ctx); err != nil {
 		log.WithErrorMsg(err, "Error bootstrapping clickhouse driver")
 		exit()
 	}
@@ -45,7 +45,7 @@ func main() {
 		exit()
 	}
 
-	// init unauthenticated bsky client
+	// init authenticated bsky client
 	if client, err = bsky.NewSyncClient(); err != nil {
 		log.WithErrorMsg(err, "Error creating bsky sync client")
 		exit()

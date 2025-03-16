@@ -4,7 +4,7 @@ CREATE SCHEMA IF NOT EXISTS atgraph;
 CREATE TABLE IF NOT EXISTS atgraph.profiles
 (
     did         String NOT NULL PRIMARY KEY, -- did: (string, required): the account DID associated with the repo, in strictly normalized form (eg, lowercase as appropriate)
-    type        String NOT NULL,             -- type: atproto lexicon type ex. app.bsky.actor.profile
+    lexicon     String NOT NULL,             -- lexicon: atproto lexicon type ex. app.bsky.actor.profile
     handle      String,                      -- handle: atproto handle (changes when using custom domains)
     created     DateTime('UTC') NOT NULL,    -- created: app.bsky.actor.profile created timestamp
     ingested    DateTime('UTC') NOT NULL,    -- ingested: timestamp for tracking ingestion lag time
@@ -15,6 +15,6 @@ CREATE TABLE IF NOT EXISTS atgraph.profiles
 );
 
 CREATE INDEX IF NOT EXISTS idx_profiles_handle ON atgraph.profiles(handle);
-CREATE INDEX IF NOT EXISTS idx_profiles_type ON atgraph.profiles(type);
+CREATE INDEX IF NOT EXISTS idx_profiles_lexicon ON atgraph.profiles(lexicon);
 CREATE INDEX IF NOT EXISTS idx_profiles_created ON atgraph.profiles(created);
 CREATE INDEX IF NOT EXISTS idx_profiles_updated ON atgraph.profiles(updated);

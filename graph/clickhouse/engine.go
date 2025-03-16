@@ -6,16 +6,13 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
-	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/mikeblum/atproto-graph-viz/bsky"
 	"github.com/mikeblum/atproto-graph-viz/conf"
 	"github.com/mikeblum/atproto-graph-viz/graph"
-)
-
-const (
-	modulePath = "github.com/mikeblum/atproto-graph-viz"
+	"github.com/mikeblum/atproto-graph-viz/version"
 )
 
 type Engine struct {
@@ -27,11 +24,8 @@ type Engine struct {
 func NewEngine(ctx context.Context) (graph.Engine, error) {
 	var build *debug.Module
 	var ok bool
-	if build, ok = buildVersion(); !ok {
-		build = &debug.Module{
-			Path:    modulePath,
-			Version: "develop",
-		}
+	if build, ok = version.BuildVersion(); !ok {
+
 	}
 	conn := clickhouse.OpenDB(&clickhouse.Options{
 		Addr: []string{"127.0.0.1:9000"},
@@ -79,7 +73,7 @@ func NewEngine(ctx context.Context) (graph.Engine, error) {
 }
 
 func (e *Engine) LoadSchema(ctx context.Context) error {
-	schemaBytes, err := os.ReadFile("../../sql/schema-clickhouse.sql")
+	schemaBytes, err := os.ReadFile("./sql/schema-clickhouse.sql")
 	if err != nil {
 		return fmt.Errorf("failed to read ClickHouse schema file: %w", err)
 	}
@@ -107,19 +101,8 @@ func (e *Engine) Close(ctx context.Context) error {
 	return e.db.Close()
 }
 
-// resolve build version
-func buildVersion() (*debug.Module, bool) {
-	log := conf.NewLog()
-	if info, ok := debug.ReadBuildInfo(); ok {
-		for _, dep := range info.Deps {
-			log.Debug("build-info", "path", dep.Path, "version", dep.Version)
-			if strings.EqualFold(dep.Path, modulePath) {
-				return dep, true
-			}
-		}
-	}
-	log.Error("Error resolving build info")
-	return nil, false
+func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) error {
+	return fmt.Errorf("ingest not supported - use IngestEngine")
 }
 
 // validate graph.Engine interface is implemented

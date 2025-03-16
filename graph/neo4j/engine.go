@@ -40,6 +40,11 @@ func NewEngine(ctx context.Context) (graph.Engine, error) {
 	}, driver.VerifyConnectivity(ctx)
 }
 
+func (e *Engine) LoadSchema(ctx context.Context) error {
+	// no-op since we don't load a schema beforehand
+	return nil
+}
+
 func (e *Engine) Close(ctx context.Context) error {
 	return e.driver.Close(ctx)
 }

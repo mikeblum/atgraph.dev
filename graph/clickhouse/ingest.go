@@ -2,11 +2,12 @@ package clickhouse
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/ClickHouse/ch-go"
+	"github.com/ClickHouse/ch-go/proto"
 	bskyItem "github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/mikeblum/atproto-graph-viz/bsky"
@@ -18,7 +19,7 @@ const (
 	APP_INGEST = "atproto-graph-viz:ingest"
 )
 
-func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) error {
+func (e *IngestEngine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) error {
 	var err error
 
 	var records chan *db.AtgraphProfile
@@ -55,7 +56,7 @@ func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) e
 	}
 }
 
-func (e *Engine) ingestItem(ctx context.Context, item *bsky.RepoItem) (chan *db.AtgraphProfile, error) {
+func (e *IngestEngine) ingestItem(ctx context.Context, item *bsky.RepoItem) (chan *db.AtgraphProfile, error) {
 	e.log.With("nsid", item.NSID.String(), "did", item.DID.String(), "action", "ingest", "engine", "clickhouse").Info("Ingesting bsky item")
 	records := make(chan *db.AtgraphProfile, 1)
 	defer close(records)
@@ -116,35 +117,72 @@ func (e *Engine) ingestItem(ctx context.Context, item *bsky.RepoItem) (chan *db.
 	return records, err
 }
 
-func (e *Engine) ingestionErr(item *bsky.RepoItem) error {
+func (e *IngestEngine) ingestionErr(item *bsky.RepoItem) error {
 	err := fmt.Errorf("ingest: error mapping %s", item.NSID)
-	e.log.WithErrorMsg(err, "Error ingesting bsky item", "action", "ingest", "engine", "neo4j")
+	e.log.WithErrorMsg(err, "Error ingesting bsky item", "action", "ingest", "engine", "clickhouse")
 	return err
 }
 
-func (e *Engine) ingestProfile(ctx context.Context, item *bsky.RepoItem, actor *bskyItem.ActorProfile) (chan *db.AtgraphProfile, error) {
+func (e *IngestEngine) ingestProfile(ctx context.Context, item *bsky.RepoItem, actor *bskyItem.ActorProfile) (chan *db.AtgraphProfile, error) {
+	var conn *ch.Client
+	var err error
 	records := make(chan *db.AtgraphProfile, 1)
 	group, ctx := errgroup.WithContext(ctx)
-	session := db.New(e.db)
-	createdTs, err := datetimeMust(item.DID, actor.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
 	group.Go(func() error {
-		defer close(records)
-		session.InsertProfile(ctx, db.InsertProfileParams{
-			Did:     item.DID.String(),
-			Type:    actor.LexiconTypeID,
-			Handle:  sql.NullString{String: item.Ident.Handle.String(), Valid: true},
-			Created: createdTs,
-			Rev:     sql.NullString{String: item.Rev, Valid: true},
-			Sig:     sql.NullString{String: item.Sig, Valid: true},
-			Version: item.Version,
-		})
 
-		if err != nil {
-			e.log.WithErrorMsg(err, "Error ingesting app.bsky.actor.profile", "id", item.DID.String(), "action", "ingest", "type", "app.bsky.actor.profile")
+		defer close(records)
+
+		// open ch-db conn
+		if conn, err = newConn(ctx); err != nil {
 			return err
+		}
+		defer conn.Close()
+
+		// atgraph.profiles headers
+		var (
+			did       proto.ColStr
+			lexicon   = proto.NewLowCardinality(new(proto.ColStr))
+			handle    proto.ColStr
+			createdTs = new(proto.ColDateTime64).WithPrecision(proto.PrecisionNano)
+			rev       proto.ColStr
+			sig       proto.ColStr
+			version   proto.ColUInt8
+		)
+
+		// load data
+		did.Append(item.DID.String())
+		lexicon.Append(actor.LexiconTypeID)
+		handle.Append(item.Ident.Handle.String())
+
+		if ts, err := datetimeMust(item.DID, actor.CreatedAt); ts != nil {
+			createdTs.Append(*ts)
+		} else {
+			e.log.WithError(err).Error("Missing created timestamp", "did", item.DID, "lexicon", actor.LexiconTypeID)
+		}
+
+		rev.Append(item.Rev)
+		sig.Append(item.Sig)
+		version.Append(uint8(item.Version))
+
+		input := proto.Input{
+			{Name: "did", Data: did},
+			{Name: "lexicon", Data: lexicon},
+			{Name: "handle", Data: handle},
+			{Name: "created", Data: createdTs},
+			{Name: "rev", Data: rev},
+			{Name: "sig", Data: sig},
+			{Name: "version", Data: version},
+		}
+
+		if err = conn.Do(ctx, ch.Query{
+			Body:  input.Into("profiles"), // helper that generates INSERT INTO query with all columns
+			Input: input,
+		}); err != nil {
+			e.log.WithErrorMsg(err, fmt.Sprintf("Error ingesting %s", actor.LexiconTypeID), "id", item.DID.String(), "action", "ingest", "lexicon", actor.LexiconTypeID)
+			return err
+		}
+		records <- &db.AtgraphProfile{
+			Did: item.DID.String(),
 		}
 		return nil
 	})

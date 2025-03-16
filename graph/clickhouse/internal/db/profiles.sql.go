@@ -7,40 +7,10 @@ package db
 
 import (
 	"context"
-	"database/sql"
 )
 
-const insertProfile = `-- name: InsertProfile :exec
-INSERT INTO atgraph.profiles(did, type, handle, created, ingested, rev, sig, version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-`
-
-type InsertProfileParams struct {
-	Did      string
-	Type     string
-	Handle   sql.NullString
-	Created  interface{}
-	Ingested interface{}
-	Rev      sql.NullString
-	Sig      sql.NullString
-	Version  interface{}
-}
-
-func (q *Queries) InsertProfile(ctx context.Context, arg InsertProfileParams) error {
-	_, err := q.db.ExecContext(ctx, insertProfile,
-		arg.Did,
-		arg.Type,
-		arg.Handle,
-		arg.Created,
-		arg.Ingested,
-		arg.Rev,
-		arg.Sig,
-		arg.Version,
-	)
-	return err
-}
-
 const selectProfiles = `-- name: SelectProfiles :many
-SELECT did, type, handle, created, ingested, updated, rev, sig, version FROM atgraph.profiles
+SELECT did, lexicon, handle, created, ingested, updated, rev, sig, version FROM atgraph.profiles
 `
 
 func (q *Queries) SelectProfiles(ctx context.Context) ([]AtgraphProfile, error) {
@@ -54,7 +24,7 @@ func (q *Queries) SelectProfiles(ctx context.Context) ([]AtgraphProfile, error) 
 		var i AtgraphProfile
 		if err := rows.Scan(
 			&i.Did,
-			&i.Type,
+			&i.Lexicon,
 			&i.Handle,
 			&i.Created,
 			&i.Ingested,
