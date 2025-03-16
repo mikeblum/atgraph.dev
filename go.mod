@@ -1,7 +1,6 @@
 module github.com/mikeblum/atgraph.dev
 
-go 1.23.5
-toolchain go1.24.1
+go 1.24.1
 
 require (
 	github.com/ClickHouse/ch-go v0.65.1
