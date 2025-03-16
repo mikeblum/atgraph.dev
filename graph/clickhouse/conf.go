@@ -1,6 +1,6 @@
 package clickhouse
 
-import "github.com/mikeblum/atproto-graph-viz/conf"
+import "github.com/mikeblum/atgraph.dev/conf"
 
 type Conf struct {
 	conf.EnvConf

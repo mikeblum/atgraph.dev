@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
-	"github.com/mikeblum/atproto-graph-viz/bsky"
-	"github.com/mikeblum/atproto-graph-viz/conf"
+	"github.com/mikeblum/atgraph.dev/bsky"
+	"github.com/mikeblum/atgraph.dev/conf"
 )
 
 func main() {

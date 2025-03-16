@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/mikeblum/atproto-graph-viz/bsky"
-	"github.com/mikeblum/atproto-graph-viz/conf"
-	"github.com/mikeblum/atproto-graph-viz/graph"
-	"github.com/mikeblum/atproto-graph-viz/version"
+	"github.com/mikeblum/atgraph.dev/bsky"
+	"github.com/mikeblum/atgraph.dev/conf"
+	"github.com/mikeblum/atgraph.dev/graph"
+	"github.com/mikeblum/atgraph.dev/version"
 )
 
 type Engine struct {

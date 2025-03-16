@@ -1,1 +1,1 @@
-# atproto-graph-viz
+# atgraph.dev

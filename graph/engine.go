@@ -3,7 +3,7 @@ package graph
 import (
 	"context"
 
-	"github.com/mikeblum/atproto-graph-viz/bsky"
+	"github.com/mikeblum/atgraph.dev/bsky"
 )
 
 type Engine interface {

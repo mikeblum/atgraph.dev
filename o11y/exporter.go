@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mikeblum/atproto-graph-viz/conf"
+	"github.com/mikeblum/atgraph.dev/conf"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	ServiceName = "atproto-graph-viz"
+	ServiceName = "atgraph.dev"
 )
 
 func NewO11y(ctx context.Context, log *conf.Log) (*otlpmetricgrpc.Exporter, error) {

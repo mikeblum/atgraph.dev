@@ -6,8 +6,8 @@ import (
 	"os"
 
 	"github.com/ClickHouse/ch-go"
-	"github.com/mikeblum/atproto-graph-viz/conf"
-	"github.com/mikeblum/atproto-graph-viz/graph"
+	"github.com/mikeblum/atgraph.dev/conf"
+	"github.com/mikeblum/atgraph.dev/graph"
 )
 
 const (
@@ -34,7 +34,7 @@ func newConn(ctx context.Context) (*ch.Client, error) {
 	var conn *ch.Client
 	var err error
 	if conn, err = ch.Dial(ctx, ch.Options{
-		ClientName:  "atproto-graph-viz:ingest",
+		ClientName:  "atgraph.dev:ingest",
 		Database:    "atgraph",
 		Compression: ch.CompressionLZ4,
 	}); err != nil {

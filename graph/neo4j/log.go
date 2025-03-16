@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/mikeblum/atproto-graph-viz/conf"
+	"github.com/mikeblum/atgraph.dev/conf"
 	neo4jLog "github.com/neo4j/neo4j-go-driver/v5/neo4j/log"
 )
 

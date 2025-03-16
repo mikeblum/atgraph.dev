@@ -3,8 +3,8 @@ package neo4j
 import (
 	"context"
 
-	"github.com/mikeblum/atproto-graph-viz/conf"
-	"github.com/mikeblum/atproto-graph-viz/graph"
+	"github.com/mikeblum/atgraph.dev/conf"
+	"github.com/mikeblum/atgraph.dev/graph"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/events"
-	"github.com/mikeblum/atproto-graph-viz/conf"
+	"github.com/mikeblum/atgraph.dev/conf"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/events/schedulers/sequential"

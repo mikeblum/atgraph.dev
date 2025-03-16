@@ -3,7 +3,7 @@ package bsky
 import (
 	"strconv"
 
-	"github.com/mikeblum/atproto-graph-viz/conf"
+	"github.com/mikeblum/atgraph.dev/conf"
 )
 
 type Conf struct {
