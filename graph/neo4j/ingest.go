@@ -8,13 +8,13 @@ import (
 
 	bskyItem "github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/mikeblum/atproto-graph-viz/bsky"
+	"github.com/mikeblum/atgraph.dev/bsky"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
-	APP_INGEST = "atproto-graph-viz:ingest"
+	APP_INGEST = "atgraph.dev:ingest"
 )
 
 func (e *Engine) Ingest(ctx context.Context, workerID int, item bsky.RepoItem) error {

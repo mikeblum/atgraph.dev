@@ -1,4 +1,4 @@
-module github.com/mikeblum/atproto-graph-viz
+module github.com/mikeblum/atgraph.dev
 
 go 1.23.5
 toolchain go1.24.1

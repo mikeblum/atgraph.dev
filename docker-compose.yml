@@ -10,7 +10,7 @@ services:
       - "4318:4318"   # OTLP HTTP receiver
       - "13133:13133" # OTEL collector health check
     networks:
-      - atproto-graph-viz-net
+      - atgraph-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:13133"]
       interval: 10s
@@ -35,7 +35,7 @@ services:
     ports:
       - "9090:9090"
     networks:
-      - atproto-graph-viz-net
+      - atgraph-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
       interval: 10s
@@ -52,7 +52,7 @@ services:
     environment:
       MEMORY_MAX_TRACES: 100000
     networks:
-      - atproto-graph-viz-net
+      - atgraph-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:16686"]
       interval: 10s
@@ -85,7 +85,7 @@ services:
       - neo4j-logs:/logs
       - ./neo4j:/conf
     networks:
-      - atproto-graph-viz-net
+      - atgraph-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7687"]
       interval: 10s
@@ -116,7 +116,7 @@ services:
         soft: 262144
         hard: 262144
     networks:
-      - atproto-graph-viz-net
+      - atgraph-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8123/ping"]
       interval: 10s
@@ -133,6 +133,6 @@ volumes:
   clickhouse-logs:
 
 networks:
-  atproto-graph-viz-net:
-    name: atproto-graph-viz-net
+  atgraph-net:
+    name: atgraph-net
     driver: bridge

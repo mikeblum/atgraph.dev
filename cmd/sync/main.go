@@ -4,11 +4,11 @@ import (
 	"context"
 	"os"
 
-	"github.com/mikeblum/atproto-graph-viz/bsky"
-	"github.com/mikeblum/atproto-graph-viz/conf"
-	"github.com/mikeblum/atproto-graph-viz/graph"
-	"github.com/mikeblum/atproto-graph-viz/graph/clickhouse"
-	"github.com/mikeblum/atproto-graph-viz/o11y"
+	"github.com/mikeblum/atgraph.dev/bsky"
+	"github.com/mikeblum/atgraph.dev/conf"
+	"github.com/mikeblum/atgraph.dev/graph"
+	"github.com/mikeblum/atgraph.dev/graph/clickhouse"
+	"github.com/mikeblum/atgraph.dev/o11y"
 )
 
 func main() {

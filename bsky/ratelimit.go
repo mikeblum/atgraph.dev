@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/xrpc"
-	log "github.com/mikeblum/atproto-graph-viz/conf"
+	log "github.com/mikeblum/atgraph.dev/conf"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )

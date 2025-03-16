@@ -4,11 +4,11 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/mikeblum/atproto-graph-viz/conf"
+	"github.com/mikeblum/atgraph.dev/conf"
 )
 
 const (
-	modulePath = "github.com/mikeblum/atproto-graph-viz"
+	modulePath = "github.com/mikeblum/atgraph.dev"
 )
 
 // resolve build version
