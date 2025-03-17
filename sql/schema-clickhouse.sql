@@ -1,5 +1,5 @@
 -- app.bsky.actor.profile
-CREATE TABLE IF NOT EXISTS atgraph.profiles
+CREATE OR REPLACE TABLE IF NOT EXISTS atgraph.profiles
 (
     did       String NOT NULL                              COMMENT 'did: (string, required): the account DID associated with the repo, in strictly normalized form (eg, lowercase as appropriate)',
     lexicon   String NOT NULL                              COMMENT 'lexicon: atproto lexicon type ex. app.bsky.actor.profile',
@@ -12,6 +12,6 @@ CREATE TABLE IF NOT EXISTS atgraph.profiles
     sig       String                                       COMMENT 'sig: (byte array, required): cryptographic signature of this commit, as raw bytes',
     version   UInt8                                        COMMENT 'version: (integer, required): fixed value of 3 for this repo format version',
 )
-ENGINE = MergeTree()
+ENGINE = ReplacingMergeTree(did)
 PRIMARY KEY(did)
 ORDER BY did;
