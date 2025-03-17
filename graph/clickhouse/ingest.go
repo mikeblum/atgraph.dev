@@ -140,13 +140,14 @@ func (e *IngestEngine) ingestProfile(ctx context.Context, item *bsky.RepoItem, a
 
 		// atgraph.profiles headers
 		var (
-			did       proto.ColStr
-			lexicon   = proto.NewLowCardinality(new(proto.ColStr))
-			handle    proto.ColStr
-			createdTs = new(proto.ColDateTime64).WithPrecision(proto.PrecisionNano)
-			rev       proto.ColStr
-			sig       proto.ColStr
-			version   proto.ColUInt8
+			did         proto.ColStr
+			lexicon     = proto.NewLowCardinality(new(proto.ColStr))
+			handle      proto.ColStr
+			createdTs   = new(proto.ColDateTime64).WithPrecision(proto.PrecisionNano)
+			rev         proto.ColStr
+			sig         proto.ColStr
+			version     proto.ColUInt8
+			description proto.ColStr
 		)
 
 		// load data
@@ -163,6 +164,11 @@ func (e *IngestEngine) ingestProfile(ctx context.Context, item *bsky.RepoItem, a
 		rev.Append(item.Rev)
 		sig.Append(item.Sig)
 		version.Append(uint8(item.Version))
+		if actor.Description != nil {
+			description.Append(*actor.Description)
+		} else {
+			description.Append("")
+		}
 
 		input := proto.Input{
 			{Name: "did", Data: did},
@@ -172,6 +178,7 @@ func (e *IngestEngine) ingestProfile(ctx context.Context, item *bsky.RepoItem, a
 			{Name: "rev", Data: rev},
 			{Name: "sig", Data: sig},
 			{Name: "version", Data: version},
+			{Name: "description", Data: description},
 		}
 
 		if err = conn.Do(ctx, ch.Query{
