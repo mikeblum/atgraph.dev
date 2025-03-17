@@ -1,5 +1,5 @@
 -- app.bsky.actor.profile
-CREATE OR REPLACE TABLE IF NOT EXISTS atgraph.profiles
+CREATE TABLE IF NOT EXISTS atgraph.profiles
 (
     did       String NOT NULL                              COMMENT 'did: (string, required): the account DID associated with the repo, in strictly normalized form (eg, lowercase as appropriate)',
     lexicon   String NOT NULL                              COMMENT 'lexicon: atproto lexicon type ex. app.bsky.actor.profile',
