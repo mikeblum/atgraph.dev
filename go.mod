@@ -9,7 +9,6 @@ require (
 	github.com/gorilla/websocket v1.5.1
 	github.com/ipfs/go-cid v0.5.0
 	github.com/joho/godotenv v1.5.1
-	github.com/neo4j/neo4j-go-driver/v5 v5.27.0
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.59.0
 	go.opentelemetry.io/otel v1.35.0
