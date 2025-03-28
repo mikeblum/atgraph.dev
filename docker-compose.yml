@@ -1,3 +1,4 @@
+---
 services:
   otel-collector:
     image: otel/opentelemetry-collector:latest
@@ -9,6 +10,8 @@ services:
       - "4317:4317"   # OTLP gRPC receiver
       - "4318:4318"   # OTLP HTTP receiver
       - "13133:13133" # OTEL collector health check
+    environment:
+      SIGNOZ_INGESTION_KEY: admin/admin
     networks:
       - atgraph-net
     healthcheck:
@@ -18,47 +21,8 @@ services:
       retries: 3
       start_period: 5s
     depends_on:
-      - jaeger
-      - prometheus
-    restart: unless-stopped
-  
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --web.enable-admin-api
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus-data:/prometheus
-    ports:
-      - "9090:9090"
-    networks:
-      - atgraph-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
-    restart: unless-stopped
-
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    container_name: jaeger
-    ports:
-      - "16686:16686"     # UI
-    environment:
-      MEMORY_MAX_TRACES: 100000
-    networks:
-      - atgraph-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:16686"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 5s 
+      - signoz
+      - signoz-schema-migrator
     restart: unless-stopped
 
   neo4j:
@@ -125,14 +89,57 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  signoz-schema-migrator:
+    image: signoz/signoz-schema-migrator:v0.111.36
+    container_name: signoz-schema-migrator
+    command: "sync --dsn tcp://clickhouse:9000 --up="
+    depends_on:
+      - clickhouse
+    restart: on-failure
+
+  signoz:
+    image: signoz/signoz:v0.76.2
+    container_name: signoz
+    depends_on:
+      - clickhouse
+      - signoz-schema-migrator
+    command:
+      - --config=/root/config/prometheus.yml
+    volumes:
+      - ./prometheus.yml:/root/config/prometheus.yml
+      - signoz-data:/var/lib/signoz/
+    ports:
+      - "8080:8080"  # HTTP UI
+    environment:
+      SIGNOZ_CLICKHOUSE_USER: default
+      SIGNOZ_CLICKHOUSE_PASSWORD: ""
+      # https://github.com/SigNoz/charts/blob/01c63614ee73429469795a9fd85a45044569f60b/charts/signoz/templates/_clickhouse.tpl#L29
+      # metrics
+      # SIGNOZ_CLICKHOUSE_DATABASE: atgraph_o11y_metrics
+      # traces
+      # SIGNOZ_CLICKHOUSE_TRACE_DATABASE: atgraph_o11y_traces
+      # logs
+      # SIGNOZ_CLICKHOUSE_LOG_DATABASE: atgraph_o11y_logs
+      SIGNOZ_TELEMETRYSTORE_PROVIDER: clickhouse
+      SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN: tcp://clickhouse:9000
+      GODEBUG: netdns=go 
+    networks:
+      - atgraph-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
 volumes:
   neo4j-data:
   neo4j-logs:
-  prometheus-data:
   clickhouse-data:
   clickhouse-logs:
+  signoz-data:
 
 networks:
   atgraph-net:
     name: atgraph-net
-    driver: bridge

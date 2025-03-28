@@ -2,6 +2,7 @@ package clickhouse
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -12,7 +13,13 @@ import (
 
 const (
 	// Clickhouse database schema (incompat with sqlc)
-	schemaCreateDb = `CREATE DATABASE IF NOT EXISTS atgraph ENGINE = postgresql COMMENT 'atgraph.dev ClickHouse database';`
+	schemaCreateDb              = `CREATE DATABASE IF NOT EXISTS atgraph COMMENT 'atgraph.dev ClickHouse database';`
+	schemaCreateDbO11yMetrics   = `CREATE DATABASE IF NOT EXISTS atgraph_o11y_metrics COMMENT 'metrics.o11y.atgraph.dev ClickHouse metrics database';`
+	schemaCreateDbO11yTraces    = `CREATE DATABASE IF NOT EXISTS atgraph_o11y_traces COMMENT 'traces.o11y.atgraph.dev ClickHouse traces database';`
+	schemaCreateDbO11yLogs      = `CREATE DATABASE IF NOT EXISTS atgraph_o11y_logs COMMENT 'logs.o11y.atgraph.dev ClickHouse logs database';`
+	schemaCreateDbSignozMetrics = `CREATE DATABASE IF NOT EXISTS signoz_metrics COMMENT 'signoz metrics database';`
+	schemaCreateDbSignozTraces  = `CREATE DATABASE IF NOT EXISTS signoz_traces COMMENT 'signoz traces database';`
+	schemaCreateDbSignozLogs    = `CREATE DATABASE IF NOT EXISTS signoz_logs COMMENT 'signoz logs database';`
 )
 
 type IngestEngine struct {
@@ -47,17 +54,24 @@ func newConn(ctx context.Context) (*ch.Client, error) {
 }
 
 func (e *IngestEngine) LoadSchema(ctx context.Context) error {
+	return errors.Join(e.loadSchemas(ctx, schemaCreateDb, schemaCreateDbO11yMetrics,
+		schemaCreateDbO11yTraces, schemaCreateDbO11yLogs), e.loadSchemas(ctx, schemaCreateDbSignozMetrics, schemaCreateDbSignozTraces, schemaCreateDbSignozLogs))
+}
+
+func (e *IngestEngine) loadSchemas(ctx context.Context, schemas ...string) error {
 	var conn *ch.Client
 	var err error
 	if conn, err = newConn(ctx); err != nil {
 		return err
 	}
 	defer conn.Close()
-	if err = conn.Do(ctx, ch.Query{
-		Body: schemaCreateDb,
-	}); err != nil {
-		e.log.WithError(err).Error("Error creating ClickHouse db")
-		return err
+	for _, schema := range schemas {
+		if err = conn.Do(ctx, ch.Query{
+			Body: schema,
+		}); err != nil {
+			e.log.WithError(err).Error("Error creating ClickHouse db", "schema", schema)
+			return err
+		}
 	}
 
 	var schemaBytes []byte

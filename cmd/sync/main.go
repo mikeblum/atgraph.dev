@@ -19,7 +19,7 @@ func main() {
 	var err error
 
 	// configure o11y
-	if _, err = o11y.NewO11y(ctx, log); err != nil {
+	if err = o11y.NewO11y(ctx, log); err != nil {
 		log.WithErrorMsg(err, "Error bootstrapping OTEL o11y")
 		exit()
 	}

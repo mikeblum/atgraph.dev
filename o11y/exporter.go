@@ -9,8 +9,11 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	sdk "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"google.golang.org/grpc"
 )
@@ -19,24 +22,38 @@ const (
 	ServiceName = "atgraph.dev"
 )
 
-func NewO11y(ctx context.Context, log *conf.Log) (*otlpmetricgrpc.Exporter, error) {
+func NewO11y(ctx context.Context, log *conf.Log) error {
 	// configure global error log handler
 	otel.SetErrorHandler(NewOTELErrorHandler(log.Logger))
 
 	cfg := NewConf()
 
-	var res *resource.Resource
+	var resources *resource.Resource
 	var err error
-	if res, err = resource.New(ctx,
+	if resources, err = resource.New(ctx,
+		resource.WithSchemaURL(semconv.SchemaURL),
 		resource.WithAttributes(
 			semconv.ServiceName(ServiceName),
+			semconv.ServiceVersion(cfg.GetEnv("OTEL_SERVICE_VERSION", "dev")),
 			semconv.DeploymentEnvironment(cfg.env()),
 		),
 	); err != nil {
-		return nil, err
+		return err
 	}
-	var exporter *otlpmetricgrpc.Exporter
-	if exporter, err = otlpmetricgrpc.New(ctx,
+
+	var tracesExporter *otlptrace.Exporter
+	if tracesExporter, err = otlptrace.New(
+		context.Background(),
+		otlptracegrpc.NewClient(
+			otlptracegrpc.WithInsecure(),
+			otlptracegrpc.WithEndpoint(cfg.o11yEndpoint()),
+		),
+	); err != nil {
+		return err
+	}
+
+	var metricsExporter *otlpmetricgrpc.Exporter
+	if metricsExporter, err = otlpmetricgrpc.New(ctx,
 		otlpmetricgrpc.WithEndpointURL(cfg.o11yEndpoint()),
 		otlpmetricgrpc.WithRetry(otlpmetricgrpc.RetryConfig{
 			Enabled:         true,
@@ -60,37 +77,51 @@ func NewO11y(ctx context.Context, log *conf.Log) (*otlpmetricgrpc.Exporter, erro
 			}),
 		),
 	); err != nil {
-		return nil, err
+		return err
 	}
 
-	provider := sdk.NewMeterProvider(
-		sdk.WithResource(res),
+	metricsProvider := sdk.NewMeterProvider(
+		sdk.WithResource(resources),
 		sdk.WithReader(
-			sdk.NewPeriodicReader(exporter,
+			sdk.NewPeriodicReader(metricsExporter,
 				sdk.WithInterval(10*time.Second),
 			),
 		),
 	)
 
 	// Set global meter provider
-	otel.SetMeterProvider(provider)
+	otel.SetMeterProvider(metricsProvider)
 
 	// Start runtime metrics collection
 	if err := runtime.Start(
 		runtime.WithMinimumReadMemStatsInterval(time.Second),
-		runtime.WithMeterProvider(provider),
+		runtime.WithMeterProvider(metricsProvider),
 	); err != nil {
 		log.WithError(err).Error("failed to start runtime metrics collection")
-		return nil, err
+		return err
 	}
 
-	return exporter, nil
+	otel.SetTracerProvider(
+		sdktrace.NewTracerProvider(
+			// TODO: toggle sampling for production
+			sdktrace.WithSampler(sdktrace.AlwaysSample()),
+			sdktrace.WithBatcher(tracesExporter),
+			sdktrace.WithResource(resources),
+		),
+	)
+
+	return nil
 }
 
 func Cleanup(ctx context.Context) error {
 	if provider, ok := otel.GetMeterProvider().(*sdk.MeterProvider); ok {
 		if err := provider.Shutdown(ctx); err != nil {
 			return fmt.Errorf("failed to shutdown meter provider: %w", err)
+		}
+	}
+	if provider, ok := otel.GetTracerProvider().(*sdktrace.TracerProvider); ok {
+		if err := provider.Shutdown(ctx); err != nil {
+			return fmt.Errorf("failed to shutdown traces provider: %w", err)
 		}
 	}
 	return nil
