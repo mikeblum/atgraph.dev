@@ -1,7 +1,7 @@
 ---
 services:
   otel-collector:
-    image: otel/opentelemetry-collector:latest
+    image: otel/opentelemetry-collector-contrib:latest  # Using contrib version for ClickHouse exporter
     container_name: otel-collector
     command: ["--config=/etc/otel-collector-config.yml"]
     volumes:
@@ -10,8 +10,8 @@ services:
       - "4317:4317"   # OTLP gRPC receiver
       - "4318:4318"   # OTLP HTTP receiver
       - "13133:13133" # OTEL collector health check
-    environment:
-      SIGNOZ_INGESTION_KEY: admin/admin
+      - "1777:1777"   # pprof extension
+      - "55679:55679" # zpages extension
     networks:
       - atgraph-net
     healthcheck:
@@ -21,8 +21,7 @@ services:
       retries: 3
       start_period: 5s
     depends_on:
-      - signoz
-      - signoz-schema-migrator
+      - clickhouse
     restart: unless-stopped
 
   clickhouse:
@@ -37,8 +36,9 @@ services:
       - clickhouse-logs:/var/log/clickhouse-server
       - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/custom-config.xml
       - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/custom-users.xml
+      - ./clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     environment:
-      CLICKHOUSE_DB: atgraph
+      CLICKHOUSE_DB: atgraph_o11y
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: ""
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -56,54 +56,25 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  signoz-schema-migrator:
-    image: signoz/signoz-schema-migrator:v0.111.36
-    container_name: signoz-schema-migrator
-    command: "sync --dsn tcp://clickhouse:9000 --up="
-    depends_on:
-      - clickhouse
-    restart: on-failure
-
-  signoz:
-    image: signoz/signoz:v0.76.2
-    container_name: signoz
-    depends_on:
-      - clickhouse
-      - signoz-schema-migrator
-    command:
-      - --config=/root/config/prometheus.yml
-    volumes:
-      - ./prometheus.yml:/root/config/prometheus.yml
-      - signoz-data:/var/lib/signoz/
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: grafana
     ports:
-      - "8080:8080"  # HTTP UI
+      - "3000:3000" # Grafana UI
     environment:
-      SIGNOZ_CLICKHOUSE_USER: default
-      SIGNOZ_CLICKHOUSE_PASSWORD: ""
-      # https://github.com/SigNoz/charts/blob/01c63614ee73429469795a9fd85a45044569f60b/charts/signoz/templates/_clickhouse.tpl#L29
-      # metrics
-      # SIGNOZ_CLICKHOUSE_DATABASE: atgraph_o11y_metrics
-      # traces
-      # SIGNOZ_CLICKHOUSE_TRACE_DATABASE: atgraph_o11y_traces
-      # logs
-      # SIGNOZ_CLICKHOUSE_LOG_DATABASE: atgraph_o11y_logs
-      SIGNOZ_TELEMETRYSTORE_PROVIDER: clickhouse
-      SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN: tcp://clickhouse:9000
-      GODEBUG: netdns=go 
+      - GF_INSTALL_PLUGINS=vertamedia-clickhouse-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
     networks:
       - atgraph-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    depends_on:
+      - clickhouse
     restart: unless-stopped
 
 volumes:
   clickhouse-data:
   clickhouse-logs:
-  signoz-data:
+  grafana-data:
 
 networks:
   atgraph-net:

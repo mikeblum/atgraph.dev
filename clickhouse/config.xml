@@ -8,14 +8,8 @@
         <atgraph>
             <comment>atgraph.dev ClickHouse database</comment>
         </atgraph>
-        <atgraph_o11y_metrics>
-            <comment>metrics.o11y.atgraph.dev ClickHouse metrics database</comment>
-        </atgraph_o11y_metrics>
-         <atgraph_o11y_traces>
-            <comment>traces.o11y.atgraph.dev ClickHouse traces database</comment>
-        </atgraph_o11y_traces>
-         <atgraph_o11y_logs>
-            <comment>logs.o11y.atgraph.dev ClickHouse logs database</comment>
-        </atgraph_o11y_logs>
+        <atgraph_o11y>
+            <comment>o11y.atgraph.dev ClickHouse o11y database</comment>
+        </atgraph_o11y>
     </databases>
 </clickhouse>
